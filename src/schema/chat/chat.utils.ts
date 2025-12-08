@@ -67,7 +67,9 @@ export function recursiveFlatten(
 ): FlatChatMessage[] {
   const flatList: FlatChatMessage[] = [];
 
-  messages.forEach((msg, index) => {
+  for (let index = 0; index < messages.length; index++) {
+    const msg = messages[index];
+
     const newPath = [
       ...currentPath,
       { containerIndex: index, branchId: undefined },
@@ -99,9 +101,12 @@ export function recursiveFlatten(
         flatList.push(
           ...recursiveFlatten(activeAlt.messages, currentDepth + 1, newPath)
         );
+
+        // 关键修复：一旦进入分支，控制流被移交，不再处理当前层级的后续消息
+        break;
       }
     }
-  });
+  }
 
   return flatList;
 }

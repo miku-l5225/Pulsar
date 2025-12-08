@@ -19,7 +19,6 @@ import type {
 
 // 定义处理状态接口
 export interface ProcessingState {
-  container?: MessageAlternative;
   workingChat?: EnhancedApiReadyContext;
   numericInjectGroup?: Record<number, ApiReadyMessage[]>;
   stringInjectGroup?: Record<string, ApiReadyMessage[]>;
@@ -142,7 +141,7 @@ export function createExecuteContext(
   context.tools = {
     initPreset: (ctx: ExecuteContext) => {
       if (ctx.LOREBOOK) ctx.LOREBOOK.process(ctx);
-      if (ctx.PRESET) ctx.PRESET.selectVariantByModel(ctx.chatModelName);
+      if (ctx.PRESET) ctx.PRESET.selectVariantByModel(ctx.defaultChatModel);
     },
 
     applyRegex: (ctx: ExecuteContext) => {
@@ -200,14 +199,14 @@ export function createExecuteContext(
 
     writeMessageParams: (ctx: ExecuteContext) => {
       const finalChatContext = ctx.processingState.finalChatContext;
-      const container = ctx.processingState.container;
+      const container = ctx.getContainer();
       if (!finalChatContext || !container) return;
 
       const finalMessages = finalChatContext.finalize();
       ctx.processingState.finalMessages = finalMessages;
 
       container.metaGenerateInfo.timeInfo.start = new Date().toISOString();
-      container.metaGenerateInfo.modelName = ctx.chatModelName;
+      container.metaGenerateInfo.modelName = ctx.defaultChatModel;
       container.metaGenerateInfo.renderInfo = {
         usedPresetName: ctx.PRESET?.name || "Unknown",
         characterFilePath: ctx.CHARACTER?.path ?? "",
@@ -217,13 +216,14 @@ export function createExecuteContext(
 
       ctx.processingState.generationCallParams = {
         ...(ctx.PRESET?.generationParams || {}),
-        model: ctx.chatModelName,
+        model: ctx.defaultChatModel,
         prompt: finalMessages,
       };
     },
 
     writeMessageContent: async (ctx: ExecuteContext) => {
-      const container = ctx.processingState.container;
+      console.log("generateEnter with:", ctx.processingState.finalMessages);
+      const container = ctx.getContainer();
       const params = ctx.processingState.generationCallParams;
       const finalMessages = ctx.processingState.finalMessages;
 
@@ -236,11 +236,11 @@ export function createExecuteContext(
             container.content += textPart;
           }
         } else {
-          const result = await generateText(params);
-          container.content += result;
+          const { text } = await generateText(params);
+          container.content += text;
         }
       } else {
-        container.content = "Error: Empty message array.";
+        container.content = "Error: Empty message array. check your preset";
       }
 
       const startTime = Date.parse(container.metaGenerateInfo.timeInfo.start);
@@ -248,7 +248,7 @@ export function createExecuteContext(
     },
 
     saveVector: async (ctx: ExecuteContext) => {
-      const container = ctx.processingState.container;
+      const container = ctx.getContainer();
       if (
         !container ||
         !vectorSetting?.enabled ||

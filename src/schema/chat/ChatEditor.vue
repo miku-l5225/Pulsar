@@ -1,6 +1,14 @@
 <!-- src/schema/chat/ChatEditor.vue -->
 <script setup lang="ts">
-import { computed, onMounted, type CSSProperties, nextTick, ref } from "vue";
+import {
+  computed,
+  onMounted,
+  type CSSProperties,
+  nextTick,
+  ref,
+  isRef,
+  triggerRef,
+} from "vue";
 import { push } from "notivue";
 
 // Features & Composables
@@ -8,7 +16,6 @@ import { useFileContent } from "@/features/FileSystem/composables/useFileContent
 import { useResources } from "@/schema/manifest/composables/useResources.ts";
 import { useFlattenedChat } from "./useFlattenedChat";
 import { useChatScroll } from "./composables/useChatScroll";
-import { useMessageEditor } from "./composables/useMessageEditor";
 
 // Types
 import { type RootChat, type AdditionalParts } from "./chat.types";
@@ -17,7 +24,6 @@ import { type role } from "../shared.types";
 // Components
 import { ScrollArea } from "@/components/ui/scroll-area";
 import ChatInputArea from "./ChatInputArea.vue";
-import MessageScope from "./MessageScope.vue";
 import { Button } from "@/components/ui/button";
 import { ArrowDown } from "lucide-vue-next";
 import ChatBubble from "./ChatBubble.vue";
@@ -34,14 +40,20 @@ const {
   deleteContainer,
   fork,
   appendMessage,
-  appendMessageToLeaf,
+  appendMessageToLeaf, // 重点使用这个
+  addBlankMessage,
   setMessageContent,
   generate,
-  addNewMessage,
-  addNewBranch,
   addBlankBranch,
   polish,
+  renameAlternative,
 } = useFlattenedChat(chatReactive);
+
+const { isAtBottom, scrollToBottom, handleScroll } = useChatScroll(
+  computed(() => flattenedChat.value.messages.length)
+);
+onMounted(() => scrollToBottom("auto"));
+const inputAreaRef = ref();
 
 const {
   avatar: resourceAvatar,
@@ -49,23 +61,11 @@ const {
   background,
 } = useResources(pathRef);
 
-// --- Editor Logic ---
-const { editingIndex, editingContent, startEdit, cancelEdit, saveEdit } =
-  useMessageEditor(flattenedChat.value, {
-    onSetContent: setMessageContent,
-    onNewMessage: addNewMessage,
-    onNewBranch: addNewBranch,
-  });
-
 // --- Scroll Logic ---
-const messageCount = computed(() => flattenedChat.value.messages.length);
-const { messageListRef, isAtBottom, scrollToBottom, handleScroll } =
-  useChatScroll(messageCount);
 
 onMounted(() => scrollToBottom("auto"));
 
 // --- Actions Handlers ---
-const inputAreaRef = ref();
 
 // 通用动作分发器
 function handleMessageAction(action: string, index: number) {
@@ -78,6 +78,9 @@ function handleMessageAction(action: string, index: number) {
       break;
     case "branch":
       addBlankBranch(index, true);
+      break;
+    case "add-new":
+      addBlankMessage(index, true);
       break;
     case "polish":
       handlePolishAction({ index });
@@ -113,6 +116,7 @@ async function handlePolishAction(
       CTX: null as any,
     };
     finalContext.CTX = finalContext;
+    await nextTick();
 
     if (finalContext.PRESET?.generate) {
       if (!("index" in target)) {
@@ -153,7 +157,7 @@ async function handleGenerate(index?: number) {
   }
 }
 
-// 发送逻辑
+// 修改 onSend 逻辑以支持 generate 参数
 async function onSend(
   content: string,
   files: File[],
@@ -170,12 +174,24 @@ async function onSend(
       filename: f.name,
     } as any);
   }
+
+  // 核心修改：支持不同角色插入
   appendMessageToLeaf(content, role, {
     additionalParts: parts.length ? parts : undefined,
   });
+
   if (shouldGenerate) {
     await nextTick();
-    handleGenerate();
+    // 只有当需要生成时才调用
+    if (role === "user") {
+      handleGenerate();
+    } else {
+      // 如果插入的是 assistant 且要求生成（通常不应该发生，但逻辑上支持），则触发生成
+      // 或者这里可以理解为 "继续生成"
+    }
+  } else {
+    await nextTick();
+    scrollToBottom("smooth");
   }
 }
 
@@ -226,53 +242,32 @@ const backgroundStyle = computed<CSSProperties>(() => {
     <div class="relative z-10 flex-1 min-h-0 flex flex-col">
       <ScrollArea ref="messageListRef" class="h-full" @scroll="handleScroll">
         <div
-          class="flex flex-col px-4 py-6 max-w-5xl mx-auto w-full min-h-full"
+          class="flex flex-col px-4 py-6 max-w-4xl mx-auto w-full min-h-full"
         >
-          <!--
-            [NEW] 使用 MessageScope 进行隔离包装
-            将 index 和修改方法闭包进去，内部组件无需再传递 index
-          -->
-          <MessageScope
+          <ChatBubble
             v-for="(msg, i) in flattenedChat.messages"
             :key="msg.id"
             :message="msg"
             :index="i"
-            :on-update-content="(content) => setMessageContent(i, content)"
-            :on-action="(action) => handleMessageAction(action, i)"
-          >
-            <ChatBubble
-              :message="msg"
-              :index="i"
-              :is-editing="editingIndex === i"
-              :avatar-src="resourceAvatar.src.value"
-              v-model:editingContent="editingContent"
-              @edit-start="startEdit"
-              @edit-cancel="cancelEdit"
-              @edit-save="saveEdit"
-              @switch-alt="switchAlternative"
-              @action="handleMessageAction"
-            />
-          </MessageScope>
+            :avatar-src="resourceAvatar.src.value"
+            @update-content="(content) => setMessageContent(i, content)"
+            @switch-alt="(altIndex) => switchAlternative(i, altIndex)"
+            @action="(action) => handleMessageAction(action, i)"
+            @rename="(name) => renameAlternative(i, name)"
+          />
 
-          <!-- 底部垫高，防止最后一条消息被输入框遮挡 -->
-          <div class="h-4"></div>
+          <!-- 底部垫高：Input Area 现在是浮动的，需要留出更多空间 -->
+          <div class="h-48"></div>
         </div>
       </ScrollArea>
 
-      <!-- 回到底部悬浮按钮 -->
-      <transition
-        enter-active-class="transition duration-200 ease-out"
-        enter-from-class="translate-y-10 opacity-0"
-        enter-to-class="translate-y-0 opacity-100"
-        leave-active-class="transition duration-150 ease-in"
-        leave-from-class="translate-y-0 opacity-100"
-        leave-to-class="translate-y-10 opacity-0"
-      >
+      <!-- 回到底部悬浮按钮 (位置调整) -->
+      <transition enter-active-class="..." leave-active-class="...">
         <Button
           v-if="!isAtBottom"
           size="icon"
           variant="secondary"
-          class="absolute bottom-4 right-6 rounded-full shadow-lg z-30 opacity-90 hover:opacity-100"
+          class="absolute bottom-28 right-8 rounded-full shadow-lg z-30 opacity-90 hover:opacity-100"
           @click="scrollToBottom('smooth')"
         >
           <ArrowDown class="h-5 w-5" />
@@ -280,15 +275,18 @@ const backgroundStyle = computed<CSSProperties>(() => {
       </transition>
     </div>
 
-    <!-- 底部输入框 -->
-    <ChatInputArea
-      ref="inputAreaRef"
-      :disabled="!chatReactive"
-      @send="onSend"
-      @polish="(c, r) => handlePolishAction({ content: c, role: r })"
-    />
+    <!-- 底部输入框容器：调整为绝对定位或者浮动层级更高 -->
+    <div
+      class="absolute bottom-0 left-0 right-0 z-40 bg-linear-to-t from-background via-background/80 to-transparent pb-4 pt-10 px-4"
+    >
+      <ChatInputArea
+        ref="inputAreaRef"
+        :disabled="!chatReactive"
+        @send="onSend"
+        @polish="(c, r) => handlePolishAction({ content: c, role: r })"
+      />
+    </div>
   </div>
-
   <!-- Loading State -->
   <div
     v-else

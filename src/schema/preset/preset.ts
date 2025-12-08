@@ -156,15 +156,11 @@ class PresetWrapper {
    * @param ctx - 包含了所有运行时数据和方法的执行上下文。
    * @param container - 用于接收和存储生成结果的消息对象。
    */
-  public async process(
-    ctx: ExecuteContext,
-    container: MessageAlternative
-  ): Promise<void> {
+  public async process(ctx: ExecuteContext): Promise<void> {
     // 步骤 0: 初始化状态
     // 必须确保 processingState 存在并将 container 挂载上去，
     // 以便后续无参工具函数能够访问到目标容器。
     ctx.processingState = ctx.processingState || {};
-    ctx.processingState.container = container;
 
     // 步骤 1: 初始化预设与环境
     // - 处理世界书
@@ -294,7 +290,7 @@ function createDefaultPreset(): Preset {
    // 已经被封装在 PRESET.process 方法中。
 
    // 通常情况下，您只需要调用此方法即可完成生成：
-   await PRESET.process(CTX, container);
+   await PRESET.process(CTX, CTX.container);
 
    // ===============================================================
    // 可用变量和高级用法
@@ -306,7 +302,7 @@ function createDefaultPreset(): Preset {
    //   - CTX.CHARACTER:  角色包装器。
    //   - CTX.PRESET:     当前的预设包装器实例 (与全局的 PRESET 相同)。
    //   - CTX.REGEX:      正则表达式处理器。
-   //   - CTX.chatModelName: 当前选择的模型名称 (字符串)。
+   //   - CTX.defaultChatModel: 当前选择的模型名称 (字符串)。
    //
    // - container:        响应式消息容器。AI的响应内容应写入 container.content。
    //
@@ -328,7 +324,7 @@ function createDefaultPreset(): Preset {
    const myParams = {
      ...PRESET.generationParams,
      temperature: 0.5,
-     model: CTX.chatModelName,
+     model: CTX.defaultChatModel,
      messages: myMessages,
    };
 

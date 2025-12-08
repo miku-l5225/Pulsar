@@ -27,6 +27,7 @@ import {
 } from "./chat";
 
 export function useFlattenedChat(chatRef: MaybeRef<RootChat | null>) {
+  console.log("chatRef", chatRef);
   // 1. 核心计算属性：压平聊天记录
   const flattenedChat = computed<FlattenedChat>(() => {
     const root = toValue(chatRef);
@@ -257,112 +258,193 @@ export function useFlattenedChat(chatRef: MaybeRef<RootChat | null>) {
   };
 
   // ========== 生成逻辑 (Generate) ==========
-
   const generate = (index?: number) => {
+    // 1. 获取当前的 Root，用于初始检查
     const root = toValue(chatRef);
+
     if (!root) {
-      const emptyContext: ApiReadyContext = {
-        activeMessages: [],
-        resolvedUserValue: {},
-        resolvedIntervals: [],
-      };
+      // 错误处理... (保持原样)
       return {
-        CHAT: new EnhancedApiReadyContext(emptyContext),
-        rawContext: emptyContext,
-        container: null,
-        remove: () => console.warn("Chat does not exist."),
+        CHAT: new EnhancedApiReadyContext({
+          activeMessages: [],
+          resolvedUserValue: {},
+          resolvedIntervals: [],
+        }),
+        rawContext: {
+          activeMessages: [],
+          resolvedUserValue: {},
+          resolvedIntervals: [],
+        },
+        getContainer: () => {
+          throw new Error("Root lost");
+        },
+        remove: () => {},
       };
     }
 
-    // 1. 创建占位符 (使用工厂)
+    // 2. 准备 ID 和 纯对象
+    const newAltId = nanoid();
     const newAlternative = createMessageAlternative("");
+    newAlternative.id = newAltId; // 显式赋值 ID
+
+    // 用于闭包的寻址器
+    let getLatestContainer: () => any;
+    let removeCleanup: () => void;
 
     // --- 情况 A: 重生成 (指定位置) ---
     if (index !== undefined) {
-      const result = getContainerByIndex(index);
-      if (!result?.container) {
-        console.error(`Generate failed: container not found at ${index}`);
-        const contextResult = createChatContext(root);
-        return { ...contextResult, container: null, remove: () => {} };
-      }
+      // 1. 获取路径信息 (这是静态的坐标，不会变)
+      // 我们需要保留 path 副本，不要保留引用
+      const originalPath = cloneDeep(flattenedChat.value.messages[index]?.path);
 
-      const container = result.container;
-      const originalActiveIndex = container.activeAlternative;
+      if (!originalPath) throw new Error(`Invalid generate index: ${index}`);
 
-      // 生成 Context (截止到此消息之前)
+      // 2. 初始插入 (还是需要找到一次容器来 push)
+      // 这里使用工具函数找到容器
+      const lookup = findContainerByPath(root, originalPath);
+      if (!lookup) throw new Error("Container not found for insertion");
+
+      const { container: parentContainer } = lookup;
+      const originalActiveIndex = parentContainer.activeAlternative;
+
+      // 3. 插入纯对象
+      parentContainer.alternatives.push(newAlternative);
+      parentContainer.activeAlternative =
+        parentContainer.alternatives.length - 1;
+
+      // 4. 生成上下文
       const contextResult = createChatContext(root, index - 1);
 
-      // 插入并激活
-      container.alternatives.push(newAlternative);
-      container.activeAlternative = container.alternatives.length - 1;
+      // 5. 【核心】：构建实时寻址函数
+      getLatestContainer = () => {
+        // A. 重新获取最新的 Root
+        const currentRoot = toValue(chatRef);
+        if (!currentRoot)
+          throw new Error("Chat root became null during generation");
 
-      const remove = () => {
-        const idx = container.alternatives.findIndex(
-          (alt) => alt.id === newAlternative.id
+        // B. 根据路径重新找到容器
+        const result = findContainerByPath(currentRoot, originalPath);
+        if (!result || !result.container) {
+          // 容错：如果路径失效（极少见），尝试回退机制或抛出
+          throw new Error("Container path invalid during generation");
+        }
+
+        // C. 在容器中找到我们的 Alternative
+        const target = result.container.alternatives.find(
+          (a: any) => a.id === newAltId
         );
-        if (idx > -1) {
-          container.alternatives.splice(idx, 1);
-          if (originalActiveIndex < container.alternatives.length) {
-            container.activeAlternative = originalActiveIndex;
-          } else {
-            container.activeAlternative = Math.max(
-              0,
-              container.alternatives.length - 1
+        if (!target) throw new Error("Alternative lost from container");
+
+        return target;
+      };
+
+      removeCleanup = () => {
+        // 同样需要实时查找才能删除正确
+        try {
+          const currentRoot = toValue(chatRef);
+          if (!currentRoot) return;
+          const result = findContainerByPath(currentRoot, originalPath);
+          if (result?.container) {
+            const idx = result.container.alternatives.findIndex(
+              (a: any) => a.id === newAltId
             );
+            if (idx > -1) {
+              result.container.alternatives.splice(idx, 1);
+              // 恢复索引
+              if (originalActiveIndex < result.container.alternatives.length) {
+                result.container.activeAlternative = originalActiveIndex;
+              }
+            }
           }
+        } catch (e) {
+          console.error("Cleanup failed", e);
         }
       };
 
       return {
         CHAT: contextResult.container,
         rawContext: contextResult.rawContext,
-        container: newAlternative,
-        remove,
+        getContainer: getLatestContainer,
+        remove: removeCleanup,
       };
     }
 
     // --- 情况 B: 新生成 (追加到底部) ---
-    // 生成 Context (完整)
-    const contextResult = createChatContext(root, undefined);
 
-    // 创建新容器 (使用工厂)
+    // 1. 准备新容器 ID
+    const newContainerId = nanoid();
     const newContainer = createMessageContainer(
       "assistant",
       [newAlternative],
       0
     );
+    newContainer.id = newContainerId;
 
-    // 找到位置并插入
-    const leafContainer = findActiveLeafContainer(root);
-    const leafArray = leafContainer.messages;
-    leafArray.push(newContainer);
+    // 2. 初始插入
+    const initialLeaf = findActiveLeafContainer(root);
+    initialLeaf.messages.push(newContainer);
 
-    const remove = () => {
-      const idx = leafArray.findIndex((item) => item.id === newContainer.id);
-      if (idx > -1) leafArray.splice(idx, 1);
+    // 3. 生成上下文
+    const contextResult = createChatContext(root, undefined);
+
+    // 4. 【核心】：构建实时寻址函数
+    getLatestContainer = () => {
+      // A. 重新获取 Root
+      const currentRoot = toValue(chatRef);
+      if (!currentRoot) throw new Error("Chat root lost");
+
+      // B. 重新找到当前的活动叶子节点
+      // 假设用户没有在生成过程中切换分支，这通常是正确的
+      const currentLeaf = findActiveLeafContainer(currentRoot);
+
+      // C. 在叶子节点的消息列表中查找我们的容器 ID
+      // 这里必须用 find，不能用索引，因为可能正好有其他操作插入了消息
+      const containerFound = currentLeaf.messages.find(
+        (m) => m.id === newContainerId
+      );
+
+      if (!containerFound) {
+        // 极端情况：如果用户切换了分支，findActiveLeafContainer 可能会变。
+        // 如果需要更稳健，这里应该实现一个全局的 findNodeById(root, newContainerId)
+        // 但对于 "当前对话流"，findActiveLeafContainer 通常足够
+        throw new Error("Generated container lost (branch switched?)");
+      }
+
+      // D. 返回 Alternative
+      return containerFound.alternatives[0];
+    };
+
+    removeCleanup = () => {
+      try {
+        const currentRoot = toValue(chatRef);
+        if (!currentRoot) return;
+        const currentLeaf = findActiveLeafContainer(currentRoot);
+        const idx = currentLeaf.messages.findIndex(
+          (m) => m.id === newContainerId
+        );
+        if (idx > -1) currentLeaf.messages.splice(idx, 1);
+      } catch (e) {
+        console.error("Cleanup failed", e);
+      }
     };
 
     return {
       CHAT: contextResult.container,
       rawContext: contextResult.rawContext,
-      container: newAlternative,
-      remove,
+      getContainer: getLatestContainer,
+      remove: removeCleanup,
     };
   };
 
   // ========== Embedding ==========
 
   const embedMessage = async (index: number, forceModel?: string) => {
-    // 此处保留原有逻辑，因为它涉及副作用(API调用)和store读取
-    // 实际项目中建议将 embed 逻辑本身也封装成类似 createChatContext 的独立服务
-    // 这里省略具体实现以聚焦于你要求的解耦
+    // 此处保留原有逻辑
     console.log("Embed message at", index, forceModel);
   };
 
   /**
    * 准备润色上下文。
-   * 此方法不修改实际的聊天树（对于新消息），或者为现有消息添加新版本（对于旧消息）。
-   * 它返回用于执行的对象，包含 reactive 的 container 和标志位。
    */
   const polish = (
     target: { index: number } | { content: string; role: role }
@@ -370,16 +452,13 @@ export function useFlattenedChat(chatRef: MaybeRef<RootChat | null>) {
     const root = toValue(chatRef);
     if (!root) throw new Error("Chat root is missing");
 
-    let container: any; // 这里的类型实际上是 MessageContainer，但为了响应式包装，我们在下面处理
+    let container: any;
     let rawContext: ApiReadyContext;
     let removeCleanup: () => void = () => {};
 
-    // 标志位：告诉预设这是一个润色请求
     const intention = "polish";
 
-    // 情况 A: 润色现有消息 (Old Message)
-    // 上下文：该消息之前的所有消息 (类似 regenerate)
-    // 容器：原容器，但我们会推入一个新的 Alternative 供预设写入
+    // 情况 A: 润色现有消息
     if ("index" in target) {
       const { index } = target;
       const result = getContainerByIndex(index);
@@ -390,18 +469,16 @@ export function useFlattenedChat(chatRef: MaybeRef<RootChat | null>) {
       const realContainer = result.container;
       const originalActiveIndex = realContainer.activeAlternative;
 
-      // 1. 获取上下文 (截止到此消息之前)
+      // 1. 获取上下文
       const contextResult = createChatContext(root, index - 1);
       rawContext = contextResult.rawContext;
 
-      // 2. 准备容器：添加一个新的空白版本供流式写入
-      // 注意：预设可以通过检查 container.alternatives[originalActiveIndex] 来获取“待润色”的原文
+      // 2. 准备容器
       const newAlternative = createMessageAlternative("");
       realContainer.alternatives.push(newAlternative);
       realContainer.activeAlternative = realContainer.alternatives.length - 1;
 
-      // 响应式包装：虽然 store 是 reactive 的，但为了统一接口，我们还是处理一下
-      // 这里直接使用 store 中的引用即可
+      // result.container 已经是 store 中的响应式对象，所以这里是安全的
       container = realContainer;
 
       removeCleanup = () => {
@@ -410,45 +487,30 @@ export function useFlattenedChat(chatRef: MaybeRef<RootChat | null>) {
         );
         if (idx > -1) {
           realContainer.alternatives.splice(idx, 1);
-          // 恢复之前的选中状态
           if (originalActiveIndex < realContainer.alternatives.length) {
             realContainer.activeAlternative = originalActiveIndex;
           }
         }
       };
     }
-    // 情况 B: 润色输入框内容 (New Input)
-    // 上下文：当前所有已激活消息 (类似推入新消息)
-    // 容器：创建一个临时的、未挂载到树上的容器
+    // 情况 B: 润色输入框内容 (未挂载到树上)
     else {
       const { content, role } = target;
-
-      // 1. 获取上下文 (完整历史)
       const contextResult = createChatContext(root, undefined);
       rawContext = contextResult.rawContext;
 
-      // 2. 创建临时容器
-      // 这里我们将待润色的内容放入第一个 alternative
-      // 预设如果智能，应该知道去读取这个内容，然后覆写它，或者我们在外部处理
-      // 这里的逻辑是：创建一个临时容器，作为"正在被润色"的对象
+      // 这里的容器是临时的，使用 reactive 显式包装，以支持界面更新
       const tempAlternative = createMessageAlternative(content);
       const tempContainer = createMessageContainer(role, [tempAlternative], 0);
 
       container = reactive(tempContainer);
     }
 
-    // 构造返回给 ExecuteContext 的结构
-    // 这里我们不进一步包装 container 为 class，而是返回一个包含它的 payload
     return {
-      // 供 Preset 使用的上下文
       rawContext,
-      CHAT: new EnhancedApiReadyContext(rawContext), // 兼容旧接口
-
-      // 核心：容器和标志位
-      container: container as typeof container, // 保持类型
+      CHAT: new EnhancedApiReadyContext(rawContext),
+      container: container as typeof container,
       intention,
-
-      // 清理函数
       remove: removeCleanup,
     };
   };

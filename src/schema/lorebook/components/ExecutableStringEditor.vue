@@ -1,8 +1,6 @@
 <!-- src/schema/lorebook/components/ExecutableStringEditor.vue -->
-<!-- ExecutableStringEditor.vue -->
 <script setup lang="ts">
 import { ref, watch, computed } from "vue";
-import { cloneDeep } from "lodash-es";
 import { VueTagsInput } from "@sipec/vue3-tags-input";
 
 // --- 组件导入 ---
@@ -29,42 +27,28 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Wand2 } from "lucide-vue-next";
 
-// --- Props & Emits 定义 (v-model 支持) ---
+// --- Props & Emits 定义 ---
 const props = defineProps<{
   modelValue: string[];
 }>();
 const emit = defineEmits(["update:modelValue"]);
 
-// --- 内部状态管理 ---
-// 本地副本，避免直接修改 prop
-const localConditions = ref<string[]>(cloneDeep(props.modelValue || []));
-// 当外部 v-model 变化时，同步到内部
-watch(
-  () => props.modelValue,
-  (newVal) => {
-    localConditions.value = cloneDeep(newVal || []);
-  },
-  { deep: true }
-);
-// 当内部值变化时，通过 emit 更新外部 v-model
-watch(
-  localConditions,
-  (newVal) => {
-    emit("update:modelValue", newVal);
-  },
-  { deep: true }
-);
+// --- vue-tags-input 逻辑 ---
+const newTagText = ref(""); // 输入框中的新文本
 
-// --- vue-tags-input 兼容性 ---
-const newTagText = ref(""); // 用于 vue-tags-input 的 v-model
+// 直接从 props 计算 tags，移除 localConditions 中间层，避免死循环
 const conditionsAsTags = computed(() => {
-  return (localConditions.value || []).map((text) => ({ text }));
+  return (props.modelValue || []).map((text) => ({ text }));
 });
+
+// 当 tags 发生变化时（添加或删除），直接 emit 更新父组件
 const updateConditionsFromTags = (newTags: { text: string }[]) => {
-  localConditions.value = newTags.map((tag) => tag.text);
+  // 提取纯字符串数组
+  const newStringArray = newTags.map((tag) => tag.text);
+  emit("update:modelValue", newStringArray);
 };
 
-// --- 表达式构建器逻辑 (从原 ExpressionBuilder.vue 移入) ---
+// --- 表达式构建器逻辑 ---
 const popoverOpen = ref(false);
 const selectedFunction = ref<string>("");
 const functions = [
@@ -105,6 +89,7 @@ const functions = [
     description: "打印日志并激活",
   },
 ];
+
 const currentArgType = computed(
   () =>
     functions.find((f) => f.value === selectedFunction.value)?.argType || "none"
@@ -116,7 +101,7 @@ const builderTags = ref<{ text: string }[]>([]);
 const numberArg = ref(50);
 const textArg = ref("");
 
-// 构建表达式并添加到 localConditions 中
+// 构建表达式并 Emit
 const buildAndAddExpression = () => {
   if (!selectedFunction.value) return;
   let expression = "";
@@ -142,10 +127,14 @@ const buildAndAddExpression = () => {
       expression = `${selectedFunction.value}()`;
       break;
   }
+
   if (expression) {
-    localConditions.value.push(expression);
+    // 创建新数组并 Emit
+    const currentList = props.modelValue ? [...props.modelValue] : [];
+    currentList.push(expression);
+    emit("update:modelValue", currentList);
   }
-  popoverOpen.value = false; // 关闭并触发下面的 watch 来重置状态
+  popoverOpen.value = false;
 };
 
 // popover 关闭时重置构建器状态
@@ -290,7 +279,7 @@ const getExpressionTooltip = (expression: string): string | null => {
 </template>
 
 <style>
-/* 将样式也一并移入，使其完全自包含 */
+/* 样式保持不变，略 */
 .vue-tags-input {
   max-width: 100% !important;
   background-color: oklch(var(--background)) !important;

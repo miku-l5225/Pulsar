@@ -1,10 +1,36 @@
-<!-- src/schema/chat/ChatBubble.vue -->
+<script lang="ts">
+import { type InjectionKey, type Ref, inject } from "vue";
+import type { FlatChatMessage } from "./chat.types";
+
+export interface MessageContext {
+  message: Ref<FlatChatMessage>;
+  index: Ref<number>;
+  updateContent: (newContent: string) => void;
+  dispatchAction: (action: string) => void;
+}
+
+export const MessageContextKey: InjectionKey<MessageContext> =
+  Symbol("MessageContext");
+
+export function useMessageContext() {
+  const context = inject(MessageContextKey);
+  if (!context) throw new Error("useMessageContext missing");
+  return context;
+}
+</script>
+
 <script setup lang="ts">
-import { computed, defineAsyncComponent, type Component } from "vue";
-import { type FlatChatMessage } from "./chat.types";
+import {
+  computed,
+  defineAsyncComponent,
+  type Component,
+  ref,
+  provide,
+  toRef,
+} from "vue";
 import { type role } from "../shared.types";
 
-// Components
+// UI Components
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -13,6 +39,10 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu";
 import {
   Tooltip,
@@ -20,7 +50,16 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-const MarkdownRender = defineAsyncComponent(() => import("markstream-vue"));
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 // Icons
 import {
@@ -34,99 +73,146 @@ import {
   MoreHorizontal,
   ChevronLeft,
   ChevronRight,
-  Save,
   GitBranchPlus,
-  Wand2,
-  GitFork,
-  MessageSquarePlus,
+  Volume2,
+  Languages,
+  Check,
+  Plus,
+  Tag,
 } from "lucide-vue-next";
+import { useClipboard } from "@vueuse/core"; // Optional hook
+
+const MarkdownRender = defineAsyncComponent(() => import("markstream-vue"));
 
 const props = defineProps<{
   message: FlatChatMessage;
   index: number;
-  isEditing: boolean;
   avatarSrc: string;
 }>();
 
 const emit = defineEmits<{
-  (e: "edit-start", index: number): void;
-  (e: "edit-cancel"): void;
-  (e: "edit-save"): void;
-  (e: "update:editingContent", content: string): void;
-  (e: "switch-alt", index: number, altIndex: number): void;
-  (e: "action", action: string, index: number): void;
+  (e: "update-content", content: string): void;
+  (e: "switch-alt", altIndex: number): void;
+  (e: "action", action: string): void;
+  (e: "rename", name: string): void;
 }>();
 
+// --- Logic ---
+const isEditing = ref(false);
+const editingContent = ref("");
+const { copy, copied } = useClipboard({ legacy: true });
+
+function startEdit() {
+  const content = props.message.content;
+  if (content.type === "message") {
+    editingContent.value = content.content;
+    isEditing.value = true;
+  }
+}
+
+function saveEdit() {
+  if (
+    props.message.content.type === "message" &&
+    editingContent.value !== props.message.content.content
+  ) {
+    emit("update-content", editingContent.value);
+  }
+  isEditing.value = false;
+}
+
+function handleCopy() {
+  if (props.message.content.type === "message") {
+    copy(props.message.content.content);
+    // 如果没有 vueuse，这里写 navigator.clipboard.writeText
+  }
+}
+
+// Provide Context
+const messageRef = toRef(props, "message");
+const indexRef = toRef(props, "index");
+provide(MessageContextKey, {
+  message: messageRef,
+  index: indexRef,
+  updateContent: (c) => emit("update-content", c),
+  dispatchAction: (a) => emit("action", a),
+});
+
+// UI Helpers
 const roleIcons: Record<role, Component> = {
   user: User,
   assistant: Bot,
   system: Cog,
 };
 
-// 样式映射
-const bubbleVariants = {
-  user: "bg-primary text-primary-foreground rounded-2xl rounded-tr-sm",
-  assistant:
-    "bg-card text-card-foreground border shadow-sm rounded-2xl rounded-tl-sm",
-  system: "bg-muted text-muted-foreground border-2 border-dashed rounded-xl",
-};
-
-// 本地编辑内容绑定
-const localEditContent = computed({
-  get: () =>
-    props.message.content.type === "message"
-      ? props.message.content.content
-      : "", // 简化处理，实际应从父组件传入
-  set: (val) => emit("update:editingContent", val),
+// 气泡样式微调：移除大色块背景，更接近截图的干净风格
+// Assistant: 透明/卡片背景, User: 只有文字或轻微背景
+const bubbleContainerClass = computed(() => {
+  if (props.message.role === "user") return "flex-row-reverse";
+  return "flex-row";
 });
 
-// 分支导航逻辑
-const hasBranches = computed(() => props.message.availableAlternativeCount > 1);
-const currentBranchInfo = computed(
-  () =>
-    `${props.message.activeAlternative + 1} / ${
-      props.message.availableAlternativeCount
-    }`
-);
+const contentContainerClass = computed(() => {
+  if (props.message.role === "user")
+    return "bg-secondary/50 text-secondary-foreground rounded-[20px] rounded-tr-md";
+  // Assistant 消息背景透明，依靠 Markdown 渲染
+  return "bg-transparent px-0";
+});
 
-function handleAction(action: string) {
-  emit("action", action, props.index);
+const hasBranches = computed(() => props.message.availableAlternativeCount > 1);
+
+// 4. 新增：重命名状态管理
+const isRenameOpen = ref(false);
+const renameInput = ref("");
+
+function openRenameDialog() {
+  // 获取当前名称（如果有），没有则为空字符串
+  renameInput.value = props.message.content.name || "";
+  isRenameOpen.value = true;
+}
+
+function saveRename() {
+  emit("rename", renameInput.value);
+  isRenameOpen.value = false;
 }
 </script>
 
 <template>
   <div
-    class="group flex w-full mb-6 animate-in fade-in slide-in-from-bottom-2 duration-300 gap-3"
-    :class="{
-      'flex-row-reverse': message.role === 'user',
-      'flex-row': message.role !== 'user',
-    }"
+    class="group flex w-full mb-6 animate-in fade-in slide-in-from-bottom-2 duration-300 gap-4"
+    :class="bubbleContainerClass"
   >
     <!-- 1. 头像 -->
-    <div class="shrink-0 mt-1">
-      <Avatar class="h-8 w-8 shadow-sm border bg-background">
+    <div class="shrink-0 mt-0.5">
+      <Avatar
+        class="h-9 w-9 shadow-sm border bg-background/50 backdrop-blur-sm"
+      >
         <AvatarImage v-if="message.role !== 'user'" :src="avatarSrc" />
         <AvatarFallback class="bg-muted">
-          <component :is="roleIcons[message.role]" class="h-4 w-4 opacity-70" />
+          <component :is="roleIcons[message.role]" class="h-5 w-5 opacity-70" />
         </AvatarFallback>
       </Avatar>
     </div>
 
     <!-- 2. 内容区域 -->
-    <div class="flex flex-col max-w-[85%] lg:max-w-[75%] min-w-[200px]">
-      <!-- 消息元信息 (角色名) -->
+    <div
+      class="flex flex-col max-w-[90%] lg:max-w-[85%] min-w-[200px] relative"
+    >
+      <!-- 消息头：角色名 + 模型名 (仅 Assistant) -->
       <div
-        class="flex items-center gap-2 mb-1 px-1 text-xs text-muted-foreground opacity-70"
-        :class="{ 'flex-row-reverse': message.role === 'user' }"
+        v-if="message.role !== 'user'"
+        class="flex items-center gap-2 mb-1.5 px-1"
       >
-        <span class="capitalize font-medium">{{ message.role }}</span>
+        <span class="text-sm font-semibold opacity-90">{{
+          (message.content.type === "message" &&
+            message.content.metaGenerateInfo?.renderInfo.characterName) ||
+          "助手角色"
+        }}</span>
         <span
           v-if="
-            message.role === 'assistant' &&
             message.content.type === 'message' &&
             message.content.metaGenerateInfo?.modelName
           "
-          class="text-[10px] border px-1 rounded bg-background/50"
+          class="text-[10px] text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded-sm border border-transparent"
         >
           {{ message.content.metaGenerateInfo.modelName }}
         </span>
@@ -134,125 +220,120 @@ function handleAction(action: string) {
 
       <!-- 气泡本体 -->
       <div
-        class="relative overflow-hidden transition-all duration-200"
+        class="relative transition-all duration-200 group/bubble"
         :class="[
-          bubbleVariants[message.role],
-          isEditing ? 'ring-2 ring-ring ring-offset-2' : '',
+          contentContainerClass,
+          isEditing ? 'ring-2 ring-ring ring-offset-2 rounded-lg' : '',
         ]"
       >
         <!-- A. 编辑模式 -->
         <div
           v-if="isEditing"
-          class="p-3 bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60"
+          class="p-3 bg-background border rounded-lg shadow-lg"
         >
           <Textarea
-            v-model="localEditContent"
-            class="min-h-[150px] resize-y bg-transparent border-0 focus-visible:ring-0 p-0 leading-relaxed"
-            placeholder="输入消息内容..."
+            v-model="editingContent"
+            class="min-h-[100px] bg-transparent border-0 focus-visible:ring-0 p-0 leading-relaxed resize-none"
+            auto-focus
+            @keydown.ctrl.enter="saveEdit"
           />
-          <div
-            class="flex justify-end gap-2 mt-3 pt-2 border-t border-border/10"
-          >
+          <div class="flex justify-end gap-2 mt-2 pt-2 border-t">
             <Button
               size="sm"
               variant="ghost"
-              class="h-7 px-3 text-xs"
-              @click="$emit('edit-cancel')"
+              class="h-7 text-xs"
+              @click="isEditing = false"
               >取消</Button
             >
-            <Button
-              size="sm"
-              class="h-7 px-3 text-xs"
-              @click="$emit('edit-save')"
+            <Button size="sm" class="h-7 text-xs" @click="saveEdit"
+              >保存</Button
             >
-              <Save class="w-3 h-3 mr-1.5" />保存
-            </Button>
           </div>
         </div>
 
         <!-- B. 阅读模式 -->
-        <div v-else class="px-5 py-3.5">
+        <div
+          v-else
+          :class="[
+            message.role === 'user' ? 'px-4 py-2 user-bubble' : 'py-1',
+            'h-fit',
+          ]"
+        >
           <div v-if="message.content.type === 'message'">
             <MarkdownRender
-              :content="
-                message.content.content ||
-                '<div class=\'opacity-50 italic\'>（空消息）</div>'
-              "
-              class="prose dark:prose-invert prose-sm md:prose-base max-w-none wrap-break-word leading-relaxed"
-              :class="{ 'prose-invert': message.role === 'user' }"
+              :content="message.content.content || '...'"
+              class="prose dark:prose-invert prose-neutral max-w-none text-[15px] leading-6 wrap-break-word"
             />
           </div>
+
+          <!-- 分支节点显示 -->
           <div
             v-else
-            class="flex items-center gap-2 p-2 rounded bg-muted/20 border border-dashed border-white/20"
+            class="flex items-center gap-2 p-3 rounded-lg bg-muted/30 border border-dashed"
           >
-            <GitBranchPlus class="w-4 h-4" />
-            <span class="text-sm font-medium"
+            <GitBranchPlus class="w-4 h-4 text-muted-foreground" />
+            <span class="text-sm text-muted-foreground"
               >分支节点: {{ message.content.name || "未命名" }}</span
             >
           </div>
         </div>
       </div>
-
-      <!-- 3. 底部工具栏 (分支 + 操作) -->
+      <!-- C. 底部/悬浮 操作栏 -->
       <div
-        class="flex items-center justify-between mt-1.5 px-1 h-6"
-        :class="{ 'flex-row-reverse': message.role === 'user' }"
+        class="flex items-center gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+        :class="message.role === 'user' ? 'justify-end' : 'justify-start'"
       >
-        <!-- 分支切换器 -->
+        <!-- 分支切换 (如果有) -->
         <div
-          class="flex items-center gap-1 transition-opacity duration-200"
-          :class="
-            hasBranches ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-          "
+          v-if="hasBranches"
+          class="flex items-center gap-0.5 h-6 select-none animate-in fade-in duration-300"
         >
-          <div
-            v-if="hasBranches"
-            class="flex items-center bg-background/80 border rounded-md shadow-sm h-6"
+          <!-- 上一个 -->
+          <button
+            class="flex items-center justify-center h-6 w-5 rounded-sm text-muted-foreground/60 hover:text-foreground hover:bg-muted transition-colors disabled:opacity-20 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+            :disabled="message.activeAlternative === 0"
+            @click="$emit('switch-alt', message.activeAlternative - 1)"
           >
-            <button
-              class="px-1 hover:bg-muted text-muted-foreground disabled:opacity-30 transition-colors h-full flex items-center"
-              :disabled="message.activeAlternative === 0"
-              @click="$emit('switch-alt', index, message.activeAlternative - 1)"
-            >
-              <ChevronLeft class="w-3 h-3" />
-            </button>
-            <span
-              class="text-[10px] font-mono px-1.5 select-none min-w-[3ch] text-center text-foreground/80"
-            >
-              {{ currentBranchInfo }}
-            </span>
-            <button
-              class="px-1 hover:bg-muted text-muted-foreground disabled:opacity-30 transition-colors h-full flex items-center"
-              :disabled="
-                message.activeAlternative >=
-                message.availableAlternativeCount - 1
-              "
-              @click="$emit('switch-alt', index, message.activeAlternative + 1)"
-            >
-              <ChevronRight class="w-3 h-3" />
-            </button>
-          </div>
+            <ChevronLeft class="w-3.5 h-3.5" />
+          </button>
+
+          <!-- 计数器 -->
+          <span
+            class="text-xs font-mono text-muted-foreground/80 min-w-[2rem] text-center leading-none pt-0.5"
+          >
+            {{ message.activeAlternative + 1 }}/{{
+              message.availableAlternativeCount
+            }}
+          </span>
+
+          <!-- 下一个 -->
+          <button
+            class="flex items-center justify-center h-6 w-5 rounded-sm text-muted-foreground/60 hover:text-foreground hover:bg-muted transition-colors disabled:opacity-20 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+            :disabled="
+              message.activeAlternative >= message.availableAlternativeCount - 1
+            "
+            @click="$emit('switch-alt', message.activeAlternative + 1)"
+          >
+            <ChevronRight class="w-3.5 h-3.5" />
+          </button>
         </div>
 
-        <!-- 操作按钮组 -->
-        <div
-          class="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-        >
-          <!-- 常用操作 -->
+        <!-- 快捷操作按钮 -->
+        <div class="flex items-center gap-0.5">
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger as-child>
                 <Button
                   variant="ghost"
                   size="icon"
-                  class="h-6 w-6 text-muted-foreground"
-                  @click="$emit('edit-start', index)"
+                  class="h-6 w-6 text-muted-foreground/60 hover:text-foreground"
+                  @click="handleCopy"
                 >
-                  <Edit2 class="w-3.5 h-3.5" />
+                  <Check v-if="copied" class="w-3.5 h-3.5 text-green-500" />
+                  <Copy v-else class="w-3.5 h-3.5" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>编辑</TooltipContent>
+              <TooltipContent>复制</TooltipContent>
             </Tooltip>
 
             <Tooltip v-if="message.role === 'assistant'">
@@ -260,46 +341,88 @@ function handleAction(action: string) {
                 <Button
                   variant="ghost"
                   size="icon"
-                  class="h-6 w-6 text-muted-foreground"
-                  @click="handleAction('regenerate')"
+                  class="h-6 w-6 text-muted-foreground/60 hover:text-foreground"
+                  @click="$emit('action', 'regenerate')"
                 >
                   <RotateCcw class="w-3.5 h-3.5" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent>重新生成</TooltipContent>
             </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  class="h-6 w-6 text-muted-foreground/60 hover:text-foreground"
+                  @click="$emit('action', 'add-new')"
+                >
+                  <Plus class="w-3.5 h-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>新建版本</TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  class="h-6 w-6 text-muted-foreground/60 hover:text-foreground"
+                  @click="startEdit"
+                >
+                  <Edit2 class="w-3.5 h-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>编辑</TooltipContent>
+            </Tooltip>
           </TooltipProvider>
 
-          <!-- 更多操作下拉菜单 -->
+          <!-- 更多菜单 -->
           <DropdownMenu>
             <DropdownMenuTrigger as-child>
               <Button
                 variant="ghost"
                 size="icon"
-                class="h-6 w-6 text-muted-foreground"
+                class="h-6 w-6 text-muted-foreground/60 hover:text-foreground ml-1"
               >
                 <MoreHorizontal class="w-3.5 h-3.5" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" class="w-40">
-              <DropdownMenuItem @click="handleAction('branch')">
+            <DropdownMenuContent align="start" class="w-48">
+              <DropdownMenuItem @click="startEdit">
+                <Edit2 class="mr-2 h-4 w-4" /> 编辑
+              </DropdownMenuItem>
+              <DropdownMenuItem @click="openRenameDialog">
+                <Tag class="mr-2 h-4 w-4" /> 重命名
+              </DropdownMenuItem>
+              <DropdownMenuItem @click="handleCopy">
+                <Copy class="mr-2 h-4 w-4" /> 复制
+              </DropdownMenuItem>
+              <DropdownMenuItem>
+                <Volume2 class="mr-2 h-4 w-4" /> 语音朗读
+              </DropdownMenuItem>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                  <Languages class="mr-2 h-4 w-4" /> 翻译
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  <DropdownMenuItem>英语</DropdownMenuItem>
+                  <DropdownMenuItem>日语</DropdownMenuItem>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem @click="$emit('action', 'regenerate')">
+                <RotateCcw class="mr-2 h-4 w-4" /> 重新生成
+              </DropdownMenuItem>
+              <DropdownMenuItem @click="$emit('action', 'branch')">
                 <GitBranchPlus class="mr-2 h-4 w-4" /> 创建分支
               </DropdownMenuItem>
-              <DropdownMenuItem @click="handleAction('polish')">
-                <Wand2 class="mr-2 h-4 w-4" /> 润色内容
-              </DropdownMenuItem>
-              <DropdownMenuItem @click="handleAction('fork')">
-                <GitFork class="mr-2 h-4 w-4" /> 复刻版本
-              </DropdownMenuItem>
-              <DropdownMenuItem @click="handleAction('insert')">
-                <MessageSquarePlus class="mr-2 h-4 w-4" /> 插入消息
-              </DropdownMenuItem>
-              <DropdownMenuItem @click="handleAction('copy')">
-                <Copy class="mr-2 h-4 w-4" /> 复制内容
-              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuItem
                 class="text-destructive focus:text-destructive"
-                @click="handleAction('delete')"
+                @click="$emit('action', 'delete')"
               >
                 <Trash2 class="mr-2 h-4 w-4" /> 删除
               </DropdownMenuItem>
@@ -309,4 +432,64 @@ function handleAction(action: string) {
       </div>
     </div>
   </div>
+
+  <Dialog v-model:open="isRenameOpen">
+    <DialogContent class="sm:max-w-[425px]">
+      <DialogHeader>
+        <DialogTitle>重命名节点</DialogTitle>
+        <DialogDescription>
+          为当前消息版本或分支设置一个名称，方便识别。
+        </DialogDescription>
+      </DialogHeader>
+      <div class="grid gap-4 py-4">
+        <div class="grid grid-cols-4 items-center gap-4">
+          <Label for="name" class="text-right"> 名称 </Label>
+          <Input
+            id="name"
+            v-model="renameInput"
+            class="col-span-3"
+            placeholder="例如：正式版 V1"
+            @keydown.enter="saveRename"
+            auto-focus
+          />
+        </div>
+      </div>
+      <DialogFooter>
+        <Button variant="outline" @click="isRenameOpen = false">取消</Button>
+        <Button @click="saveRename">保存</Button>
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>
 </template>
+
+<style scoped>
+/*
+  核心修复：移除 Markdown 渲染后的首尾元素外边距
+  这解决了气泡“看起来很高”但只有一行字的问题
+*/
+:deep(.prose > :first-child) {
+  margin-top: 0 !important;
+}
+
+:deep(.prose > :last-child) {
+  margin-bottom: 0 !important;
+}
+
+/* 针对用户消息的特殊处理：完全移除段落间距，使其看起来像纯文本 */
+.user-bubble :deep(.prose p) {
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+}
+
+/*
+  辅助修复：列表样式 (你上一个问题的修复)
+*/
+:deep(.prose ol) {
+  list-style-type: decimal;
+  padding-left: 1.2em;
+}
+:deep(.prose ul) {
+  list-style-type: disc;
+  padding-left: 1.2em;
+}
+</style>

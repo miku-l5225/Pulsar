@@ -21,7 +21,6 @@ import {
 } from "lucide-vue-next";
 
 // --- 自定义组件 ---
-// 请确保这些组件路径正确，或者根据实际情况调整
 import ExecutableStringEditor from "./ExecutableStringEditor.vue";
 import PopableTextarea from "@/components/SchemaRenderer/content-elements/PopableTextarea.vue";
 
@@ -72,29 +71,23 @@ const roleOptions = [
 ];
 
 // --- Computed ---
-// 提取唯一分组
 const groups = computed(() => {
   const g = new Set(localEntries.value.map((e) => e.groupName || "未分组"));
-  // 保持 "All" 作为逻辑键，但在界面显示时转为 "全部"
   return ["All", ...Array.from(g).sort()];
 });
 
-// 分组显示名称辅助函数
 const getGroupLabel = (group: string) => {
   if (group === "All") return "全部";
   if (group === "Ungrouped") return "未分组";
   return group;
 };
 
-// 过滤逻辑
 const filteredEntries = computed(() => {
   return localEntries.value.filter((entry) => {
-    // 处理未分组的情况，统一逻辑
     const entryGroup = entry.groupName || "未分组";
     const currentSelection =
       selectedGroup.value === "All" ? "All" : selectedGroup.value;
 
-    // 如果选的是All，则匹配所有；否则匹配具体组名（注意处理 Ungrouped/未分组 的映射）
     const matchGroup =
       currentSelection === "All" || entryGroup === currentSelection;
 
@@ -123,7 +116,7 @@ watch(
 
 const addEntry = () => {
   const newEntry: LorebookEntry = {
-    id: crypto.randomUUID().slice(0, 8), // 简短ID
+    id: crypto.randomUUID().slice(0, 8),
     name: "新条目",
     description: "",
     groupName: selectedGroup.value === "All" ? "默认分组" : selectedGroup.value,
@@ -132,13 +125,13 @@ const addEntry = () => {
     activationWhen: { alwaysActivation: false, condition: [] },
     activationEffect: {
       role: "system",
-      position: "SCENARIO", // 默认常用位置
+      position: "SCENARIO",
       content: "",
       insertion_order: 100,
       intervalsToCreate: { type: "", length: "", content: {} },
     },
   };
-  localEntries.value.unshift(newEntry); // 添加到顶部
+  localEntries.value.unshift(newEntry);
 };
 
 const removeEntry = (id: string) => {
@@ -156,24 +149,24 @@ const duplicateEntry = (entry: LorebookEntry) => {
 </script>
 
 <template>
+  <!-- 主容器：使用 border 和 background 变量 -->
   <div
-    class="flex h-[600px] w-full bg-slate-50/50 border border-slate-200 rounded-xl overflow-hidden shadow-sm font-sans"
+    class="flex h-[600px] w-full bg-background border border-border rounded-xl overflow-hidden shadow-sm font-sans"
   >
     <!-- 1. 侧边栏: 分组 -->
+    <!-- 使用 sidebar 相关的语义变量 -->
     <aside
-      class="w-56 bg-white border-r border-slate-200 flex flex-col shrink-0"
+      class="w-56 bg-sidebar border-r border-sidebar-border flex flex-col shrink-0 text-sidebar-foreground transition-colors"
     >
-      <div class="p-4 border-b border-slate-100 flex items-center gap-2">
-        <BookOpen class="text-indigo-600 h-5 w-5" />
-        <h2 class="font-bold text-sm tracking-tight text-slate-800">
-          世界书 (Lorebook)
-        </h2>
+      <div class="p-4 border-b border-sidebar-border flex items-center gap-2">
+        <BookOpen class="text-primary h-5 w-5" />
+        <h2 class="font-bold text-sm tracking-tight">世界书 (Lorebook)</h2>
       </div>
 
       <ScrollArea class="flex-1">
         <div class="p-3">
           <div
-            class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 px-2"
+            class="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2 px-2"
           >
             分组列表
           </div>
@@ -183,16 +176,21 @@ const duplicateEntry = (entry: LorebookEntry) => {
               :key="group"
               @click="selectedGroup = group"
               :class="[
-                'w-full text-left px-3 py-2 rounded-md text-xs font-medium transition-colors flex justify-between items-center',
+                'w-full text-left px-3 py-2 rounded-md text-xs font-medium transition-colors flex justify-between items-center outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring',
                 selectedGroup === group
-                  ? 'bg-indigo-50 text-indigo-700'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
+                  ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                  : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground',
               ]"
             >
               <span class="truncate">{{ getGroupLabel(group) }}</span>
               <Badge
                 variant="secondary"
-                class="ml-2 px-1.5 h-5 min-w-5 flex items-center justify-center text-[10px] bg-white border-slate-200 shadow-sm text-slate-500"
+                class="ml-2 px-1.5 h-5 min-w-5 flex items-center justify-center text-[10px] shadow-sm"
+                :class="
+                  selectedGroup === group
+                    ? 'bg-background text-foreground'
+                    : 'bg-sidebar-border/50 text-sidebar-foreground'
+                "
               >
                 {{
                   group === "All"
@@ -207,34 +205,30 @@ const duplicateEntry = (entry: LorebookEntry) => {
         </div>
       </ScrollArea>
 
-      <div class="p-3 border-t border-slate-100 bg-slate-50/50">
-        <div class="text-[10px] text-slate-400 text-center">
+      <div class="p-3 border-t border-sidebar-border bg-sidebar-accent/10">
+        <div class="text-[10px] text-muted-foreground text-center">
           总条目数: {{ localEntries.length }}
         </div>
       </div>
     </aside>
 
     <!-- 2. 主内容区域 -->
-    <main class="flex-1 flex flex-col min-w-0 bg-slate-50/30">
+    <main class="flex-1 flex flex-col min-w-0 bg-muted/20">
       <!-- 工具栏 -->
       <header
-        class="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between gap-4 shrink-0"
+        class="bg-background border-b border-border px-4 py-3 flex items-center justify-between gap-4 shrink-0"
       >
         <div class="relative max-w-md w-full">
           <Search
-            class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 h-4 w-4"
+            class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground h-4 w-4"
           />
           <Input
             v-model="searchQuery"
             placeholder="搜索触发词、名称或内容..."
-            class="pl-9 h-9 bg-slate-100 border-transparent focus:bg-white focus:border-indigo-500/50 transition-all text-xs"
+            class="pl-9 h-9 bg-muted/50 border-transparent focus:bg-background focus:border-ring transition-all text-xs shadow-none"
           />
         </div>
-        <Button
-          size="sm"
-          class="bg-indigo-600 hover:bg-indigo-700 text-white h-9 px-4 shadow-sm"
-          @click="addEntry"
-        >
+        <Button size="sm" class="h-9 px-4 shadow-sm" @click="addEntry">
           <Plus class="h-4 w-4 mr-2" />
           添加条目
         </Button>
@@ -247,15 +241,16 @@ const duplicateEntry = (entry: LorebookEntry) => {
             v-for="entry in filteredEntries"
             :key="entry.id"
             :class="[
-              'group relative bg-white rounded-xl border transition-all duration-200 overflow-hidden',
+              'group relative bg-card text-card-foreground rounded-xl border transition-all duration-200 overflow-hidden',
               entry.enabled
-                ? 'border-slate-200 shadow-sm hover:border-indigo-300'
-                : 'border-slate-100 opacity-75 bg-slate-50 grayscale-[0.5]',
+                ? 'border-border shadow-sm hover:border-primary/50'
+                : 'border-border/50 opacity-60 bg-muted/30 grayscale-[0.8]',
             ]"
           >
             <!-- 卡片头部: 元数据 -->
+            <!-- 使用 bg-muted/40 替代之前的 gradient -->
             <div
-              class="flex flex-wrap items-center justify-between px-4 py-2 border-b border-slate-100 bg-gradient-to-r from-white to-slate-50 gap-2"
+              class="flex flex-wrap items-center justify-between px-4 py-2 border-b border-border bg-muted/40 gap-2"
             >
               <div class="flex items-center gap-3 flex-1 min-w-0">
                 <!-- 启用/禁用 开关 -->
@@ -267,8 +262,8 @@ const duplicateEntry = (entry: LorebookEntry) => {
                         :class="[
                           'p-1.5 rounded-md transition-colors border',
                           entry.enabled
-                            ? 'text-indigo-600 bg-indigo-50 border-indigo-100 hover:bg-indigo-100'
-                            : 'text-slate-400 bg-white border-slate-200 hover:bg-slate-100',
+                            ? 'text-primary bg-primary/10 border-primary/20 hover:bg-primary/20'
+                            : 'text-muted-foreground bg-background border-border hover:bg-muted',
                         ]"
                       >
                         <Eye v-if="entry.enabled" class="h-4 w-4" />
@@ -283,44 +278,45 @@ const duplicateEntry = (entry: LorebookEntry) => {
 
                 <!-- 名称 & 分组 -->
                 <div class="flex flex-col min-w-0 gap-1 flex-1">
+                  <!-- Ghost Input for Title -->
                   <Input
                     v-model="entry.name"
-                    class="h-7 px-1.5 py-0 border-transparent hover:border-slate-200 focus:border-indigo-300 bg-transparent text-sm font-bold text-slate-800 placeholder:text-slate-300 w-full min-w-[120px]"
+                    class="h-7 px-1.5 py-0 border-transparent shadow-none hover:bg-background focus-visible:bg-background focus-visible:ring-1 bg-transparent text-sm font-bold placeholder:text-muted-foreground/50 w-full min-w-[120px]"
                     placeholder="条目名称"
                   />
                   <div class="flex items-center gap-2">
                     <Input
                       v-model="entry.groupName"
                       placeholder="未分组"
-                      class="h-5 w-24 px-1.5 py-0 text-[10px] bg-slate-100 border-none rounded text-slate-600 placeholder:text-slate-400 focus:ring-0 focus:bg-white focus:border focus:border-slate-200"
+                      class="h-5 w-24 px-1.5 py-0 text-[10px] bg-background/50 border-transparent hover:border-border rounded shadow-none text-muted-foreground focus-visible:ring-1 focus-visible:bg-background"
                     />
-                    <span class="text-[10px] text-slate-300 select-none"
-                      >ID: {{ entry.id }}</span
-                    >
+                    <span class="text-[10px] text-muted-foreground select-none">
+                      ID: {{ entry.id }}
+                    </span>
                   </div>
                 </div>
               </div>
 
-              <!-- 右侧操作: 优先级 & 菜单 -->
+              <!-- 右侧操作 -->
               <div
-                class="flex items-center gap-3 pl-2 border-l border-slate-100"
+                class="flex items-center gap-3 pl-2 border-l border-border/50"
               >
                 <!-- 优先级输入 -->
                 <div class="flex flex-col items-end">
                   <span
-                    class="uppercase text-[9px] font-bold text-slate-400 tracking-wider"
+                    class="uppercase text-[9px] font-bold text-muted-foreground/70 tracking-wider"
                   >
-                    权重(Order)
+                    权重
                   </span>
                   <input
                     type="number"
                     v-model.number="entry.activationEffect.insertion_order"
-                    class="w-12 text-right text-xs font-mono bg-transparent border-b border-dashed border-slate-300 focus:border-indigo-500 outline-none text-slate-600"
+                    class="w-12 text-right text-xs font-mono bg-transparent border-b border-dashed border-border focus:border-primary outline-none text-foreground placeholder:text-muted-foreground"
                     title="插入顺序权重"
                   />
                 </div>
 
-                <!-- 递归扫描开关 (迷你版) -->
+                <!-- 递归扫描开关 -->
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger as-child>
@@ -332,8 +328,8 @@ const duplicateEntry = (entry: LorebookEntry) => {
                         :class="[
                           'p-1.5 rounded transition-colors',
                           entry.escapeScanWhenRecursing
-                            ? 'text-blue-600 bg-blue-50'
-                            : 'text-slate-300 hover:text-slate-500',
+                            ? 'text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-950/30'
+                            : 'text-muted-foreground hover:text-foreground',
                         ]"
                       >
                         <SkipForward class="h-4 w-4" />
@@ -341,9 +337,6 @@ const duplicateEntry = (entry: LorebookEntry) => {
                     </TooltipTrigger>
                     <TooltipContent>
                       <p>递归扫描跳过</p>
-                      <p class="text-[10px] text-slate-400">
-                        启用后，此条目内容不会触发其他条目
-                      </p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
@@ -354,7 +347,7 @@ const duplicateEntry = (entry: LorebookEntry) => {
                     <Button
                       variant="ghost"
                       size="icon"
-                      class="h-8 w-8 text-slate-400 hover:text-slate-700"
+                      class="h-8 w-8 text-muted-foreground hover:text-foreground"
                     >
                       <MoreVertical class="h-4 w-4" />
                     </Button>
@@ -366,7 +359,7 @@ const duplicateEntry = (entry: LorebookEntry) => {
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                       @click="removeEntry(entry.id)"
-                      class="text-red-600 focus:text-red-600 focus:bg-red-50"
+                      class="text-destructive focus:text-destructive focus:bg-destructive/10"
                     >
                       <Trash2 class="mr-2 h-3.5 w-3.5" /> 删除
                     </DropdownMenuItem>
@@ -375,17 +368,17 @@ const duplicateEntry = (entry: LorebookEntry) => {
               </div>
             </div>
 
-            <!-- 卡片主体: 分栏布局 -->
+            <!-- 卡片主体 -->
             <div
-              class="flex flex-col md:flex-row text-sm divide-y md:divide-y-0 md:divide-x divide-slate-100"
+              class="flex flex-col md:flex-row text-sm divide-y md:divide-y-0 md:divide-x divide-border"
             >
-              <!-- 左侧: 激活条件 -->
+              <!-- 左侧: 激活条件 (背景稍微深一点或带色调) -->
               <div
-                class="md:w-5/12 bg-amber-50/20 p-4 flex flex-col gap-3 relative"
+                class="md:w-5/12 bg-muted/30 p-4 flex flex-col gap-3 relative"
               >
                 <div class="flex items-center justify-between mb-1">
                   <div
-                    class="flex items-center gap-2 text-amber-700/80 font-bold text-xs uppercase tracking-wide"
+                    class="flex items-center gap-2 text-muted-foreground font-bold text-xs uppercase tracking-wide"
                   >
                     <Zap class="h-3.5 w-3.5" /> 激活规则
                   </div>
@@ -397,8 +390,8 @@ const duplicateEntry = (entry: LorebookEntry) => {
                     :class="[
                       'text-[10px] px-2 py-0.5 rounded-full border transition-all font-medium flex items-center gap-1',
                       entry.activationWhen.alwaysActivation
-                        ? 'bg-green-100 text-green-700 border-green-200'
-                        : 'bg-white text-slate-400 border-slate-200 hover:border-amber-300',
+                        ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800'
+                        : 'bg-background text-muted-foreground border-border hover:border-primary/50',
                     ]"
                   >
                     <span v-if="entry.activationWhen.alwaysActivation"
@@ -413,7 +406,6 @@ const duplicateEntry = (entry: LorebookEntry) => {
                   </button>
                 </div>
 
-                <!-- 触发词编辑器 (Custom) -->
                 <div class="flex-1 min-h-[60px]">
                   <ExecutableStringEditor
                     v-if="!entry.activationWhen.alwaysActivation"
@@ -423,27 +415,27 @@ const duplicateEntry = (entry: LorebookEntry) => {
                   />
                   <div
                     v-else
-                    class="h-full flex flex-col items-center justify-center text-green-600/60 text-xs italic p-4 border border-dashed border-green-200 rounded-lg bg-green-50/30 text-center"
+                    class="h-full flex flex-col items-center justify-center text-green-600/70 dark:text-green-400/70 text-xs italic p-4 border border-dashed border-green-200 dark:border-green-800 rounded-lg bg-green-50/50 dark:bg-green-900/10 text-center"
                   >
                     此条目始终生效，<br />无需配置触发词。
                   </div>
                 </div>
               </div>
 
-              <!-- 右侧: 内容效果 -->
+              <!-- 右侧: 内容效果 (背景保持卡片背景或更亮) -->
               <div
-                class="flex-1 bg-indigo-50/10 p-4 flex flex-col gap-3 min-w-0 relative"
+                class="flex-1 bg-card p-4 flex flex-col gap-3 min-w-0 relative"
               >
                 <!-- 视觉箭头连接符 -->
                 <div
-                  class="absolute top-1/2 -left-3 -translate-y-1/2 z-10 hidden md:block text-slate-300 bg-white rounded-full p-0.5 border border-slate-100 shadow-sm"
+                  class="absolute top-1/2 -left-3 -translate-y-1/2 z-10 hidden md:flex items-center justify-center text-muted-foreground bg-background rounded-full h-6 w-6 border border-border shadow-sm"
                 >
-                  <ArrowRight class="h-4 w-4" />
+                  <ArrowRight class="h-3 w-3" />
                 </div>
 
                 <div class="flex items-center justify-between mb-1">
                   <div
-                    class="flex items-center gap-2 text-indigo-700/80 font-bold text-xs uppercase tracking-wide"
+                    class="flex items-center gap-2 text-primary font-bold text-xs uppercase tracking-wide"
                   >
                     <Database class="h-3.5 w-3.5" /> 内容效果
                   </div>
@@ -452,7 +444,7 @@ const duplicateEntry = (entry: LorebookEntry) => {
                   <div class="flex gap-2">
                     <Select v-model="entry.activationEffect.role">
                       <SelectTrigger
-                        class="h-6 w-[110px] text-[10px] px-2 bg-white border-slate-200"
+                        class="h-6 w-[110px] text-[10px] px-2 bg-background border-input"
                       >
                         <SelectValue />
                       </SelectTrigger>
@@ -461,15 +453,16 @@ const duplicateEntry = (entry: LorebookEntry) => {
                           v-for="r in roleOptions"
                           :key="r.value"
                           :value="r.value"
-                          >{{ r.label }}</SelectItem
                         >
+                          {{ r.label }}
+                        </SelectItem>
                       </SelectContent>
                     </Select>
                     <Input
                       v-model="entry.activationEffect.position"
                       placeholder="插入位置"
-                      title="Position (例如: SCENARIO, BEFORE_CHAR)"
-                      class="h-6 w-24 text-[10px] px-2 bg-white border-slate-200"
+                      title="Position"
+                      class="h-6 w-24 text-[10px] px-2 bg-background border-input"
                     />
                   </div>
                 </div>
@@ -479,7 +472,7 @@ const duplicateEntry = (entry: LorebookEntry) => {
                   v-model="entry.activationEffect.content"
                   placeholder="在此输入世界书内容..."
                   dialogTitle="编辑详细内容"
-                  class="text-xs font-mono leading-relaxed bg-white border-slate-200 focus-visible:ring-indigo-500/20 min-h-[100px] resize-none shadow-sm"
+                  class="text-xs font-mono leading-relaxed bg-background border-input focus-visible:ring-primary/20 min-h-[100px] resize-none shadow-sm"
                 />
               </div>
             </div>
@@ -488,9 +481,9 @@ const duplicateEntry = (entry: LorebookEntry) => {
           <!-- 空状态 -->
           <div
             v-if="filteredEntries.length === 0"
-            class="flex flex-col items-center justify-center py-16 text-slate-400"
+            class="flex flex-col items-center justify-center py-16 text-muted-foreground"
           >
-            <Layers class="h-12 w-12 mb-4 opacity-10" />
+            <Layers class="h-12 w-12 mb-4 opacity-20" />
             <p class="text-sm font-medium">没有找到匹配的条目。</p>
             <Button
               variant="link"
@@ -499,7 +492,7 @@ const duplicateEntry = (entry: LorebookEntry) => {
                 selectedGroup = 'All';
                 searchQuery = '';
               "
-              class="mt-2 text-indigo-600"
+              class="mt-2 text-primary"
             >
               清除筛选条件
             </Button>
@@ -511,7 +504,7 @@ const duplicateEntry = (entry: LorebookEntry) => {
 </template>
 
 <style scoped>
-/* 自定义滚动条样式 */
+/* 使用 CSS 变量适配滚动条 */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -520,10 +513,11 @@ const duplicateEntry = (entry: LorebookEntry) => {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 3px;
+  background-color: var(--color-border);
+  border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background-color: var(--color-muted-foreground);
+  opacity: 0.5;
 }
 </style>

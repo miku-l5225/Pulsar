@@ -44,30 +44,13 @@ export function useResources(activeFilePath: MaybeRef<string | null>) {
     const current = pathRef.value;
     if (!current) return null;
 
-    // A. 自身就是 manifest
-    if (
-      current.includes(".[manifest].json") ||
-      current.endsWith("manifest.json")
-    ) {
-      return current;
-    }
-
-    // B. 从文件反推 Manifest (通常在同一级，或者在 character/xxx 根目录)
-    // 这里的逻辑主要依赖 ManifestPanel 传入正确的 manifest 路径
-    // 如果没有传入，这里做一个简单的 fallback
-    const parts = current.split("/");
-    const parentDir = parts.length > 1 ? parts.slice(0, -1).join("/") : "";
-
-    // 尝试在父目录找
-    const parentNode = store.resolvePath(parentDir);
-    if (parentNode instanceof VirtualFolder) {
-      for (const [name, node] of parentNode.children) {
-        if (
-          node instanceof VirtualFile &&
-          (name.includes(".[manifest].json") || name === "manifest.json")
-        ) {
-          return node.path;
-        }
+    // 逻辑：如果以 character 开头，截取前两个目录段，和 manifest.[manifest].json 拼合
+    // 例如: 'character/Alice/chat/New chat.[chat].json' -> 'character/Alice/manifest.[manifest].json'
+    if (current.startsWith("character/")) {
+      const parts = current.split("/");
+      if (parts.length >= 2) {
+        const rootPath = parts.slice(0, 2).join("/");
+        return `${rootPath}/manifest.[manifest].json`;
       }
     }
 
@@ -381,3 +364,5 @@ export function useResources(activeFilePath: MaybeRef<string | null>) {
     availableComponents,
   };
 }
+
+(window as any).ur = useResources;

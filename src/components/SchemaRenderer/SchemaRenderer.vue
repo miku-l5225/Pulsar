@@ -4,8 +4,6 @@ import { ref, computed, type Component } from "vue";
 import { get, set } from "lodash-es";
 
 // --- Shadcn UI 组件导入 ---
-
-// 导入 Item 相关的组件
 import Item from "@/components/ui/item/Item.vue";
 import ItemActions from "@/components/ui/item/ItemActions.vue";
 import ItemContent from "@/components/ui/item/ItemContent.vue";
@@ -53,20 +51,19 @@ const emit = defineEmits(["update:data"]);
 
 // --- 状态管理 ---
 const activeGroupIndex = ref(0);
+// [NEW] 控制侧边栏折叠状态
+const isCollapsed = ref(false);
 
 // --- 计算属性 ---
 
-// 创建一个合并后的组件映射。优先使用 schema 中提供的组件。
 const availableComponents = computed(() => {
   return { ...defaultComponents, ...props.schema.components };
 });
 
-// 过滤掉分隔符，只保留可点击的 Group，用于索引计算
 const clickableGroups = computed(() =>
   props.schema.content.filter((item): item is Group => typeof item === "object")
 );
 
-// 当前激活的 Group
 const activeGroup = computed<Group | undefined>(() => {
   return clickableGroups.value[activeGroupIndex.value];
 });
@@ -80,72 +77,130 @@ function handleGroupClick(group: Group) {
   }
 }
 
-// 数据更新函数，使用 lodash.set 安全地更新深层嵌套数据
 function updateData(path: string, value: any) {
-  // 创建一个新对象以确保 Vue 的响应式系统能够检测到变化
   const newData = JSON.parse(JSON.stringify(props.data));
   set(newData, path, value);
   emit("update:data", newData);
 }
 
-// 解析组件的函数
 function resolveComponent(name: ComponentName): Component | string {
   const component = availableComponents.value[name];
   if (component) {
     return component;
   }
-  // 作为一个兜底，警告并返回字符串，让 Vue 尝试解析全局组件
-  console.warn(
-    `Component "${name}" not found. Please ensure it's defined in the schema or pre-defined components.`
-  );
+  console.warn(`Component "${name}" not found.`);
   return name;
 }
 </script>
 
 <template>
-  <!-- [MODIFIED] h-screen -> h-full: 使组件高度适应父容器，而不是固定为视口高度 -->
-  <div class="flex h-full bg-background text-foreground">
+  <div class="flex h-full bg-background text-foreground overflow-hidden">
     <!-- Left Sidebar -->
-    <!-- `min-h-0` 确保在 flex 布局下，即使内容溢出，侧边栏也不会撑开父容器高度 -->
-    <aside class="w-1/4 min-w-[250px] border-r p-4 flex flex-col min-h-0">
-      <!-- Group Meta -->
+    <aside
+      :class="[
+        'border-r flex flex-col min-h-0 transition-all duration-300 ease-in-out relative overflow-hidden',
+        isCollapsed
+          ? 'w-[60px] min-w-[60px] items-center'
+          : 'w-1/4 min-w-[250px]',
+      ]"
+    >
+      <div
+        :class="[
+          'flex items-center p-2',
+          isCollapsed ? 'justify-center' : 'justify-end',
+        ]"
+      >
+        <Button
+          variant="ghost"
+          size="icon"
+          class="h-8 w-8"
+          @click="isCollapsed = !isCollapsed"
+          :title="isCollapsed ? '展开侧边栏' : '收起侧边栏'"
+        >
+          <!-- 这里使用简单的 SVG 图标，对应 PanelLeftClose / PanelLeftOpen -->
+          <svg
+            v-if="!isCollapsed"
+            xmlns="http://www.w3.org/2000/svg"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+            <line x1="9" x2="9" y1="3" y2="21" />
+            <path d="m14 15-3-3 3-3" />
+          </svg>
+          <svg
+            v-else
+            xmlns="http://www.w3.org/2000/svg"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+            <line x1="9" x2="9" y1="3" y2="21" />
+            <path d="m17 15 3-3-3-3" />
+          </svg>
+        </Button>
+      </div>
+
+      <!-- Group Meta (Only visible when expanded) -->
       <div
         v-if="
-          typeof schema.groupMeta === 'object' && 'title' in schema.groupMeta
+          !isCollapsed &&
+          typeof schema.groupMeta === 'object' &&
+          'title' in schema.groupMeta
         "
-        class="p-2"
+        class="px-6 pb-2 min-w-0 w-full"
       >
-        <h2 class="text-lg font-semibold">
+        <h2 class="text-lg font-semibold truncate">
           {{ schema.groupMeta.title }}
         </h2>
         <p
           v-if="schema.groupMeta.description"
-          class="text-sm text-muted-foreground"
+          class="text-sm text-muted-foreground truncate"
         >
           {{ schema.groupMeta.description }}
         </p>
       </div>
-      <component :is="schema.groupMeta" v-else />
+      <!-- 如果 schema.groupMeta 是组件，也需要处理显隐逻辑，这里简单处理为展开才显示 -->
+      <component
+        :is="schema.groupMeta"
+        v-else-if="!isCollapsed && schema.groupMeta"
+      />
 
       <!-- Separator -->
       <Separator
-        class="my-4"
+        class="my-2"
         v-if="schema.content.length > 0 && schema.content[0] !== 'Separator'"
       />
 
       <!-- Navigation List -->
-      <!-- 如果左侧导航项过多，它将在此区域内被截断，但不会产生滚动条（符合“不可滑动”的要求），也不会影响整体布局 -->
-      <nav class="flex flex-col space-y-1">
+      <nav class="flex flex-col space-y-1 w-full px-2">
         <template v-for="(item, index) in schema.content" :key="index">
           <template v-if="typeof item === 'object'">
             <button
               @click="handleGroupClick(item)"
               :class="[
-                'flex items-center space-x-2 p-2 rounded-md text-left transition-colors w-full',
+                'flex items-center p-2 rounded-md transition-colors w-full',
+                // [MODIFIED] 折叠时居中，展开时左对齐
+                isCollapsed
+                  ? 'justify-center'
+                  : 'justify-start space-x-2 text-left',
                 clickableGroups.indexOf(item) === activeGroupIndex
                   ? 'bg-secondary text-secondary-foreground'
                   : 'hover:bg-muted',
               ]"
+              :title="isCollapsed ? item.title : ''"
             >
               <span
                 v-if="typeof item.svg === 'string'"
@@ -153,7 +208,9 @@ function resolveComponent(name: ComponentName): Component | string {
                 class="w-5 h-5 shrink-0"
               ></span>
               <component :is="item.svg" v-else class="w-5 h-5 shrink-0" />
-              <span>{{ item.title }}</span>
+
+              <!-- [MODIFIED] 文字只在展开时显示 -->
+              <span v-if="!isCollapsed" class="truncate">{{ item.title }}</span>
             </button>
           </template>
           <template v-else-if="item === 'Separator'">
@@ -164,11 +221,11 @@ function resolveComponent(name: ComponentName): Component | string {
     </aside>
 
     <!-- Right Content Panel -->
-    <!-- `min-h-0` 同样确保右侧面板高度受控 -->
-    <main v-if="activeGroup" class="w-3/4 min-h-0">
-      <!-- ScrollArea 设置为 h-full，它将填满 <main> 元素的可用高度，并为其内部内容提供滚动条 -->
+    <!-- [MODIFIED] w-3/4 -> flex-1: 让右侧内容自动填充剩余空间 -->
+    <!-- 添加 min-w-0 防止 flex 子元素内容溢出 -->
+    <main v-if="activeGroup" class="flex-1 min-w-0 min-h-0 bg-background/50">
       <ScrollArea class="h-full">
-        <div class="max-w-4xl mx-auto pl-8 pr-8 pt-8 pb-24">
+        <div class="max-w-5xl mx-auto px-8 py-8 pb-24">
           <!-- Header -->
           <h1 class="text-3xl font-bold">
             {{ activeGroup.content.title }}
@@ -192,7 +249,7 @@ function resolveComponent(name: ComponentName): Component | string {
                   <!-- 布局: Top-Bottom -->
                   <div
                     v-if="row.useTopBottom"
-                    class="flex flex-col space-y-2 p-4"
+                    class="flex flex-col space-y-2 p-4 border rounded-md bg-card"
                   >
                     <label class="font-medium">{{ row.title }}</label>
                     <component
@@ -224,7 +281,8 @@ function resolveComponent(name: ComponentName): Component | string {
                       </ItemDescription>
                     </ItemContent>
                     <ItemActions>
-                      <div class="w-72 flex justify-end">
+                      <!-- 稍微增加宽度以适应更大的主空间 -->
+                      <div class="w-full max-w-sm flex justify-end">
                         <component
                           :is="resolveComponent(row.component)"
                           v-bind="row.props"
