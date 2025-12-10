@@ -1,4 +1,4 @@
-// src/stores/UI.store.ts
+// src/features/UI/UI.store.ts
 
 import { defineStore } from "pinia";
 import {
@@ -17,10 +17,8 @@ import {
 import {
   useFileSystemStore,
   VirtualFile,
-  TRASH_DIR_PATH, // 引入垃圾桶路径常量
+  TRASH_DIR_PATH,
 } from "../FileSystem/FileSystem.store";
-
-// 引入事件系统
 import { FSEventType, fsEmitter } from "../FileSystem/FileSystem.events";
 
 import { Cpu, ClipboardList, Key, Server, Settings2 } from "lucide-vue-next";
@@ -28,9 +26,9 @@ import ProcessPanel from "../ProcessManager/ProcessPanel.vue";
 import TaskPanel from "../Task/TaskPanel.vue";
 import SecretsPanel from "../Secrets/SecretsPanel.vue";
 import McpPanel from "../MCP/McpPanel.vue";
-import ManifestPanel from "@/schema/manifest/ManifestPanel.vue";
+// import ManifestPanel from "@/schema/manifest/ManifestPanel.vue";
+import ContentRouter from "@/components/ResourceSidebar/ContentRouter.vue";
 
-// ... (BottomBarItem, SidebarView, UIState 接口定义保持不变) ...
 export interface BottomBarItem {
   id: string;
   name: string;
@@ -38,7 +36,15 @@ export interface BottomBarItem {
   component?: Component;
 }
 
-export type SidebarView = "files" | "character" | "none";
+// 1. 变更：扩展 SidebarView 类型，加入新的功能ID
+export type SidebarView =
+  | "files"
+  | "character"
+  | "process-manager"
+  | "task-manager"
+  | "secrets-manager"
+  | "mcp-manager"
+  | "none";
 
 export interface UIState {
   openedFiles: string[];
@@ -59,7 +65,6 @@ export interface UIState {
 export const useUIStore = defineStore("UI", () => {
   const fsStore = useFileSystemStore();
 
-  // --- State ---
   const uiState: Ref<UIState> = ref({
     openedFiles: [],
     activeFile: null,
@@ -72,19 +77,20 @@ export const useUIStore = defineStore("UI", () => {
     windowMode: null,
     isInitialized: false,
     isRightSidebarOpen: false,
-    activeRightPanelId: "process-manager",
+    activeRightPanelId: "", // 默认为空
     customSidebarIds: [],
   });
 
   const customComponents = shallowRef<Record<string, Component>>({});
   const isSingle = computed(() => uiState.value.windowMode === "single");
 
-  const bottomBarItems = shallowRef<BottomBarItem[]>([
+  // 这里包含了所有的工具项定义
+  const leftBarItems = shallowRef<BottomBarItem[]>([
     {
       id: "manifest-config",
       name: "角色配置",
       icon: Settings2,
-      component: markRaw(ManifestPanel),
+      component: markRaw(ContentRouter),
     },
     {
       id: "process-manager",
@@ -113,16 +119,14 @@ export const useUIStore = defineStore("UI", () => {
   ]);
 
   const addSidebarItem = (item: BottomBarItem) => {
-    const existingIndex = bottomBarItems.value.findIndex(
-      (i) => i.id === item.id
-    );
+    const existingIndex = leftBarItems.value.findIndex((i) => i.id === item.id);
     if (existingIndex !== -1) return;
 
     const newItem = {
       ...item,
       component: item.component ? markRaw(item.component) : undefined,
     };
-    bottomBarItems.value = [...bottomBarItems.value, newItem];
+    leftBarItems.value = [...leftBarItems.value, newItem];
   };
 
   const setSidebarContainers = (ids: string[]) => {
@@ -136,6 +140,7 @@ export const useUIStore = defineStore("UI", () => {
     };
   };
 
+  // 切换左侧栏视图
   const toggleSidebarView = (view: SidebarView) => {
     if (uiState.value.leftSidebarView === view) {
       uiState.value.leftSidebarView = "none";
@@ -147,6 +152,18 @@ export const useUIStore = defineStore("UI", () => {
   const isLeftSidebarOpen = computed(
     () => uiState.value.leftSidebarView !== "none"
   );
+
+  // 2. 变更：新增计算属性，获取当前左侧栏激活的动态组件
+  const activeLeftComponent = computed(() => {
+    const view = uiState.value.leftSidebarView;
+    // 如果是预设的文件或角色，返回 null (由 layout 显式处理)
+    if (view === "files" || view === "character" || view === "none") {
+      return null;
+    }
+    // 查找对应的组件
+    const item = leftBarItems.value.find((i) => i.id === view);
+    return item ? item.component : null;
+  });
 
   const toggleRightSidebar = (id?: string) => {
     if (!id) {
@@ -165,13 +182,13 @@ export const useUIStore = defineStore("UI", () => {
   };
 
   const activeRightComponent = computed(() => {
-    const item = bottomBarItems.value.find(
+    const item = leftBarItems.value.find(
       (i) => i.id === uiState.value.activeRightPanelId
     );
     return item ? item.component : null;
   });
 
-  // --- File Logic ---
+  // --- File Logic (保持不变) ---
   const openFile = (path: string) => {
     const isInternalComponent = path.startsWith("$");
     if (!isInternalComponent) {
@@ -193,15 +210,11 @@ export const useUIStore = defineStore("UI", () => {
     const index = uiState.value.openedFiles.indexOf(path);
     if (index === -1) return;
     uiState.value.openedFiles.splice(index, 1);
-
-    // 如果关闭的是当前激活的文件，尝试切换到其他文件
     if (uiState.value.activeFile === path) {
-      // 优先选右边的，没有则选左边的，再没有则置空
       const nextFile =
         uiState.value.openedFiles[index] ??
         uiState.value.openedFiles[index - 1] ??
         null;
-
       uiState.value.activeFile = nextFile;
     }
   };
@@ -210,7 +223,7 @@ export const useUIStore = defineStore("UI", () => {
     uiState.value.activeFile = path;
   };
 
-  // --- Persistence ---
+  // --- Persistence (保持不变) ---
   const saveState = () => {
     try {
       localStorage.setItem(
@@ -231,11 +244,10 @@ export const useUIStore = defineStore("UI", () => {
     if (!json) return;
     try {
       const state = JSON.parse(json);
-      // 恢复时验证文件是否存在（可选，防止打开已死的文件）
       uiState.value.openedFiles = state.openedFiles || [];
       uiState.value.activeFile = state.activeFile || null;
       if (state.leftSidebarView !== undefined)
-        uiState.value.leftSidebarView = state.leftSidebarView;
+        uiState.value.leftSidebarView = state.leftSidebarView as SidebarView;
     } catch (e) {
       console.error(e);
     }
@@ -251,13 +263,8 @@ export const useUIStore = defineStore("UI", () => {
     { deep: true }
   );
 
-  // --- Event Handling Logic ---
-
-  /**
-   * 处理文件/文件夹路径变更（重命名或移动）
-   */
+  // --- Event Handling Logic (保持不变) ---
   const handlePathChange = (oldPath: string, newPath: string) => {
-    // 检查是否移入了回收站
     if (
       newPath.startsWith(TRASH_DIR_PATH + "/") ||
       newPath === TRASH_DIR_PATH
@@ -265,22 +272,15 @@ export const useUIStore = defineStore("UI", () => {
       handlePathDeletion(oldPath);
       return;
     }
-
-    // 1. 更新 openedFiles
-    // 必须创建一个新数组以保持响应性，或者小心地替换
     for (let i = 0; i < uiState.value.openedFiles.length; i++) {
       const currentPath = uiState.value.openedFiles[i];
       if (currentPath === oldPath) {
-        // 完全匹配（文件重命名）
         uiState.value.openedFiles[i] = newPath;
       } else if (currentPath.startsWith(oldPath + "/")) {
-        // 前缀匹配（文件夹重命名导致子文件路径变更）
         uiState.value.openedFiles[i] =
           newPath + currentPath.slice(oldPath.length);
       }
     }
-
-    // 2. 更新 activeFile
     const active = uiState.value.activeFile;
     if (active) {
       if (active === oldPath) {
@@ -291,21 +291,14 @@ export const useUIStore = defineStore("UI", () => {
     }
   };
 
-  /**
-   * 处理文件/文件夹删除
-   */
   const handlePathDeletion = (path: string) => {
-    // 找出所有受影响的打开文件（自身或子文件）
     const filesToClose = uiState.value.openedFiles.filter(
       (opened) => opened === path || opened.startsWith(path + "/")
     );
-
-    // 逐个关闭
     filesToClose.forEach((file) => closeFile(file));
   };
 
   const setupEventListeners = () => {
-    // 文件事件
     fsEmitter.on(FSEventType.FILE_RENAMED, ({ oldPath, newPath }) =>
       handlePathChange(oldPath, newPath)
     );
@@ -315,8 +308,6 @@ export const useUIStore = defineStore("UI", () => {
     fsEmitter.on(FSEventType.FILE_DELETED, ({ path }) =>
       handlePathDeletion(path)
     );
-
-    // 文件夹事件
     fsEmitter.on(FSEventType.DIR_RENAMED, ({ oldPath, newPath }) =>
       handlePathChange(oldPath, newPath)
     );
@@ -335,10 +326,7 @@ export const useUIStore = defineStore("UI", () => {
     } catch (e) {
       console.warn("Not running in Tauri window context");
     }
-
-    // 启动监听
     setupEventListeners();
-
     restoreState();
     uiState.value.isInitialized = true;
   };
@@ -347,11 +335,12 @@ export const useUIStore = defineStore("UI", () => {
     uiState,
     customComponents,
     registerComponent,
-    bottomBarItems,
+    bottomBarItems: leftBarItems,
     addSidebarItem,
     setSidebarContainers,
     isLeftSidebarOpen,
     toggleSidebarView,
+    activeLeftComponent, // 导出新属性
     toggleRightSidebar,
     activeRightComponent,
     isSingle,

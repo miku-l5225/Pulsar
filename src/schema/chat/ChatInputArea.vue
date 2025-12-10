@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
 import { type role } from "../shared.types.ts";
-import { useLocalStorage } from "@vueuse/core"; // 推荐引入 vueuse，如果没有可换成 ref + onMounted 读取
+import { useLocalStorage } from "@vueuse/core";
+import { isMobile } from "@/utils/platform"; // 导入
 import {
   Paperclip,
   Sparkles,
@@ -33,10 +34,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-const props = defineProps<{
-  disabled?: boolean;
-}>();
-
+const props = defineProps<{ disabled?: boolean }>();
 const emit = defineEmits<{
   (
     e: "send",
@@ -48,12 +46,11 @@ const emit = defineEmits<{
   (e: "polish", content: string, role: role): void;
 }>();
 
-// --- 状态 ---
+const mobile = isMobile(); // 移动端状态
 const newMessage = ref("");
 const attachedFiles = ref<File[]>([]);
 const fileInput = ref<HTMLInputElement | null>(null);
 
-// 发送偏好设置 (Enter vs Ctrl+Enter)
 type SendKeyMode = "enter" | "ctrl-enter";
 const sendKeyMode = useLocalStorage<SendKeyMode>("chat-send-key-mode", "enter");
 
@@ -61,24 +58,19 @@ const canSend = computed(
   () => newMessage.value.trim().length > 0 || attachedFiles.value.length > 0
 );
 
-// --- 动作 ---
-
 function triggerFileInput() {
   fileInput.value?.click();
 }
-
 function handleFileSelect(event: Event) {
   const target = event.target as HTMLInputElement;
   if (target.files) attachedFiles.value.push(...Array.from(target.files));
 }
 
-// 核心发送逻辑
 function handleSendAction(
   targetRole: role = "user",
   shouldGenerate: boolean = true
 ) {
   if (!canSend.value || props.disabled) return;
-
   emit(
     "send",
     newMessage.value,
@@ -86,15 +78,13 @@ function handleSendAction(
     targetRole,
     shouldGenerate
   );
-
-  // 清理
   newMessage.value = "";
   attachedFiles.value = [];
   if (fileInput.value) fileInput.value.value = "";
 }
 
-// 键盘事件处理
 function handleKeydown(e: KeyboardEvent) {
+  if (mobile) return; // 移动端通常不使用键盘快捷键发送，依赖软键盘回车或点击按钮
   if (e.key === "Enter") {
     if (
       sendKeyMode.value === "enter" &&
@@ -102,16 +92,22 @@ function handleKeydown(e: KeyboardEvent) {
       !e.ctrlKey &&
       !e.metaKey
     ) {
-      // 模式为 Enter 发送，且未按 Shift (换行)
       e.preventDefault();
       handleSendAction("user", true);
     } else if (sendKeyMode.value === "ctrl-enter" && (e.ctrlKey || e.metaKey)) {
-      // 模式为 Ctrl+Enter 发送
       e.preventDefault();
       handleSendAction("user", true);
     }
   }
 }
+
+// 适配 Placeholder
+const placeholderText = computed(() => {
+  if (mobile) return "输入消息...";
+  return sendKeyMode.value === "enter"
+    ? "输入消息，按 Enter 发送..."
+    : "输入消息，按 Ctrl + Enter 发送...";
+});
 
 const setDraft = (text: string) => {
   newMessage.value = text;
@@ -120,10 +116,16 @@ defineExpose({ setDraft });
 </script>
 
 <template>
-  <div class="relative w-full max-w-4xl mx-auto px-4 pb-6 pt-2 z-20">
+  <!-- 适配：移动端 px-0, 桌面端 px-4 -->
+  <div
+    class="relative w-full max-w-4xl mx-auto z-20"
+    :class="mobile ? 'px-0' : 'px-4 pb-6 pt-2'"
+  >
     <!-- 悬浮岛容器 -->
+    <!-- 适配：移动端减小圆角，去除边框使其与键盘融合更好，或保留微边框 -->
     <div
-      class="relative flex flex-col bg-background/80 backdrop-blur-sm shadow-xl border rounded-3xl transition-all duration-300 ring-1 ring-border/50 focus-within:ring-primary/30 focus-within:border-primary/50"
+      class="relative flex flex-col bg-background/80 backdrop-blur-sm shadow-xl transition-all duration-300 ring-1 ring-border/50 focus-within:ring-primary/30 focus-within:border-primary/50"
+      :class="mobile ? 'rounded-2xl border-t' : 'border rounded-3xl'"
     >
       <!-- 文件预览区 -->
       <div
@@ -149,38 +151,21 @@ defineExpose({ setDraft });
       <!-- 输入区域 -->
       <Textarea
         v-model="newMessage"
-        :placeholder="
-          sendKeyMode === 'enter'
-            ? '输入消息，按 Enter 发送...'
-            : '输入消息，按 Ctrl + Enter 发送...'
-        "
-        class="w-full resize-none border-0 bg-transparent focus-visible:ring-0 px-5 py-4 min-h-[60px] max-h-[300px] text-base leading-relaxed placeholder:text-muted-foreground/40 scrollbar-hide"
+        :placeholder="placeholderText"
+        class="w-full resize-none border-0 bg-transparent focus-visible:ring-0 px-5 py-4 min-h-[50px] max-h-[200px] text-base leading-relaxed placeholder:text-muted-foreground/40 scrollbar-hide"
         rows="1"
         @keydown="handleKeydown"
       />
 
       <!-- 底部工具栏 -->
       <div class="flex items-center justify-between px-3 pb-3 mt-1 select-none">
-        <!-- 左侧：工具与模型 (模仿截图) -->
+        <!-- 左侧：工具与模型 -->
         <div class="flex items-center gap-1">
-          <!-- 模型指示器/设置 -->
-          <!-- <Button
-            variant="ghost"
-            size="sm"
-            class="h-8 gap-2 px-2 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted/60"
-          >
-            <div
-              class="w-5 h-5 rounded-full bg-linear-to-tr from-pink-500 to-violet-500 flex items-center justify-center text-[10px] text-white font-bold"
-            >
-              GPT
-            </div>
-            <span class="text-xs font-medium">GPT-4o</span>
-          </Button> -->
-
-          <Separator orientation="vertical" class="h-4 mx-1" />
+          <!-- 移动端可以隐藏非必要的分隔符以节省空间 -->
+          <!-- <Separator v-if="!mobile" orientation="vertical" class="h-4 mx-1" /> -->
 
           <!-- 功能按钮组 -->
-          <TooltipProvider :delay-duration="300">
+          <TooltipProvider :delay-duration="300" :disabled="mobile">
             <Tooltip>
               <TooltipTrigger as-child>
                 <Button
@@ -234,7 +219,7 @@ defineExpose({ setDraft });
 
         <!-- 右侧：发送组合按钮 -->
         <div class="flex items-center gap-2">
-          <!-- 字符计数 (可选) -->
+          <!-- 字符计数 -->
           <span
             v-if="newMessage.length > 0"
             class="text-[10px] text-muted-foreground animate-in fade-in"
@@ -254,12 +239,12 @@ defineExpose({ setDraft });
               class="h-8 rounded-l-[12px] rounded-r-none px-3 hover:bg-primary-foreground/10 text-primary-foreground disabled:text-primary-foreground/50"
               @click="handleSendAction('user', true)"
             >
+              <!-- 移动端只显示图标或精简文字 -->
               <CornerDownLeft
-                v-if="sendKeyMode === 'enter'"
+                v-if="!mobile && sendKeyMode === 'enter'"
                 class="w-4 h-4 mr-2"
               />
-              <span v-else class="text-xs font-bold mr-2">⌘</span>
-              发送
+              <span>发送</span>
             </Button>
 
             <Separator
@@ -283,17 +268,16 @@ defineExpose({ setDraft });
                   class="text-xs text-muted-foreground px-2 py-1.5"
                   >发送设置</DropdownMenuLabel
                 >
-
-                <DropdownMenuRadioGroup v-model="sendKeyMode">
-                  <DropdownMenuRadioItem value="enter" class="text-xs">
-                    按 Enter 键发送
-                  </DropdownMenuRadioItem>
-                  <DropdownMenuRadioItem value="ctrl-enter" class="text-xs">
-                    按 Ctrl + Enter 键发送
-                  </DropdownMenuRadioItem>
+                <DropdownMenuRadioGroup v-if="!mobile" v-model="sendKeyMode">
+                  <DropdownMenuRadioItem value="enter" class="text-xs"
+                    >按 Enter 键发送</DropdownMenuRadioItem
+                  >
+                  <DropdownMenuRadioItem value="ctrl-enter" class="text-xs"
+                    >按 Ctrl + Enter 键发送</DropdownMenuRadioItem
+                  >
                 </DropdownMenuRadioGroup>
 
-                <DropdownMenuSeparator />
+                <DropdownMenuSeparator v-if="!mobile" />
 
                 <DropdownMenuLabel
                   class="text-xs text-muted-foreground px-2 py-1.5"
@@ -301,7 +285,7 @@ defineExpose({ setDraft });
                 >
                 <DropdownMenuItem @click="handleSendAction('assistant', false)">
                   <Bot class="w-3.5 h-3.5 mr-2 text-purple-500" />
-                  <span>添加一条 AI 消息</span>
+                  <span>添加 AI 消息</span>
                   <span
                     class="ml-auto text-[10px] text-muted-foreground border px-1 rounded"
                     >不生成</span
@@ -309,7 +293,7 @@ defineExpose({ setDraft });
                 </DropdownMenuItem>
                 <DropdownMenuItem @click="handleSendAction('user', false)">
                   <User class="w-3.5 h-3.5 mr-2 text-blue-500" />
-                  <span>添加一条用户消息</span>
+                  <span>添加用户消息</span>
                   <span
                     class="ml-auto text-[10px] text-muted-foreground border px-1 rounded"
                     >不生成</span

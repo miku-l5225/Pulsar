@@ -1,4 +1,3 @@
-<!-- src/schema/modelConfig/components/ProviderModelsTable.vue -->
 <template>
   <div>
     <Card>
@@ -6,142 +5,159 @@
         <CardTitle>可用模型</CardTitle>
         <CardDescription> 该提供商支持以下类型的模型。 </CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent class="p-0 md:p-6">
+        <!-- 移除内边距以获得最大宽度 -->
         <Tabs default-value="chat" class="w-full">
-          <TabsList class="grid w-full grid-cols-5">
-            <TabsTrigger
-              v-for="(label, key) in modelTypeMap"
-              :key="key"
-              :value="key"
+          <!--
+             [MODIFIED] Tabs List:
+             - Mobile: flex flex-wrap 允许换行，或使用 horizontal scroll
+             - Desktop: grid-cols-5 保持原样
+          -->
+          <div class="px-4 pt-4 md:px-0 md:pt-0">
+            <TabsList
+              class="flex flex-wrap h-auto gap-2 md:grid md:grid-cols-5 w-full"
             >
-              {{ label }}
-            </TabsTrigger>
-          </TabsList>
+              <TabsTrigger
+                v-for="(label, key) in modelTypeMap"
+                :key="key"
+                :value="key"
+                class="flex-1 md:flex-none min-w-[80px]"
+              >
+                {{ label }}
+              </TabsTrigger>
+            </TabsList>
+          </div>
+
           <TabsContent
             v-for="(_, typeKey) in modelTypeMap"
             :key="typeKey"
             :value="typeKey"
             class="mt-4"
           >
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead class="w-20">状态</TableHead>
-                  <TableHead>模型名称</TableHead>
-                  <TableHead v-if="typeKey === 'chat'">功能</TableHead>
-                  <TableHead class="w-40 text-right">操作</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                <template
-                  v-if="
-                    (models as any)[typeKey] &&
-                    (models as any)[typeKey].length > 0
-                  "
-                >
-                  <TableRow
-                    v-for="model in (models as any)[typeKey]"
-                    :key="`${typeKey}-${model.name}`"
+            <!--
+               [MODIFIED] Table Container:
+               添加 horizontal scroll 容器，保证表格在移动端不挤压
+            -->
+            <div class="overflow-x-auto w-full">
+              <Table class="min-w-[600px] md:min-w-0">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead class="w-16">状态</TableHead>
+                    <TableHead>模型名称</TableHead>
+                    <TableHead v-if="typeKey === 'chat'">功能</TableHead>
+                    <TableHead class="w-28 text-right">操作</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <template
+                    v-if="
+                      (models as any)[typeKey] &&
+                      (models as any)[typeKey].length > 0
+                    "
                   >
-                    <TableCell>
-                      <Switch v-model="model.enabled" />
-                    </TableCell>
-                    <TableCell class="font-medium">
-                      <TooltipProvider :delay-duration="100">
-                        <Tooltip>
-                          <TooltipTrigger>
-                            <span class="block max-w-[200px] truncate">
-                              {{ model.name }}
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>{{ model.name }}</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    </TableCell>
-                    <TableCell v-if="typeKey === 'chat'">
-                      <div class="flex items-center gap-3">
-                        <TooltipProvider
-                          v-for="cap in allCapabilities"
-                          :key="cap"
-                        >
+                    <TableRow
+                      v-for="model in (models as any)[typeKey]"
+                      :key="`${typeKey}-${model.name}`"
+                    >
+                      <TableCell>
+                        <Switch v-model="model.enabled" />
+                      </TableCell>
+                      <TableCell class="font-medium">
+                        <TooltipProvider :delay-duration="100">
                           <Tooltip>
                             <TooltipTrigger>
-                              <component
-                                :is="capabilityIcons[cap]"
-                                v-if="capabilityIcons[cap]"
-                                class="h-4 w-4"
-                                :class="
-                                  (model as ChatModel).capabilities?.includes(
-                                    cap,
-                                  )
-                                    ? 'text-foreground'
-                                    : 'text-muted-foreground/30'
-                                "
-                              />
+                              <span
+                                class="block max-w-[150px] md:max-w-[200px] truncate"
+                              >
+                                {{ model.name }}
+                              </span>
                             </TooltipTrigger>
-                            <TooltipContent
-                              ><p>
-                                {{ cap }}
-                              </p></TooltipContent
-                            >
+                            <TooltipContent>
+                              <p>{{ model.name }}</p>
+                            </TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
-                      </div>
-                    </TableCell>
-                    <TableCell v-else>-</TableCell>
-                    <TableCell class="text-right">
-                      <div class="flex items-center justify-end gap-2">
-                        <Button
-                          v-if="typeKey === 'chat'"
-                          variant="outline"
-                          size="icon"
-                          @click="handleTestModel(model.name)"
+                      </TableCell>
+                      <TableCell v-if="typeKey === 'chat'">
+                        <div class="flex items-center gap-2 md:gap-3">
+                          <TooltipProvider
+                            v-for="cap in allCapabilities"
+                            :key="cap"
+                          >
+                            <Tooltip>
+                              <TooltipTrigger>
+                                <component
+                                  :is="capabilityIcons[cap]"
+                                  v-if="capabilityIcons[cap]"
+                                  class="h-4 w-4"
+                                  :class="
+                                    (model as ChatModel).capabilities?.includes(
+                                      cap,
+                                    )
+                                      ? 'text-foreground'
+                                      : 'text-muted-foreground/30'
+                                  "
+                                />
+                              </TooltipTrigger>
+                              <TooltipContent
+                                ><p>
+                                  {{ cap }}
+                                </p></TooltipContent
+                              >
+                            </Tooltip>
+                          </TooltipProvider>
+                        </div>
+                      </TableCell>
+                      <TableCell v-else>-</TableCell>
+                      <TableCell class="text-right">
+                        <div
+                          class="flex items-center justify-end gap-1 md:gap-2"
                         >
-                          <Bot class="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          @click="
-                            openEditDialog(
-                              model,
-                              typeKey as
-                                | 'chat'
-                                | 'embedding'
-                                | 'image'
-                                | 'speech'
-                                | 'transcription'
-                            )
-                          "
-                        >
-                          <Pencil class="h-4 w-4" />
-                        </Button>
-                      </div>
+                          <Button
+                            v-if="typeKey === 'chat'"
+                            variant="outline"
+                            size="icon"
+                            class="h-8 w-8"
+                            @click="handleTestModel(model.name)"
+                          >
+                            <Bot class="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            class="h-8 w-8"
+                            @click="openEditDialog(model, typeKey as any)"
+                          >
+                            <Pencil class="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  </template>
+                  <TableRow v-else>
+                    <TableCell
+                      :colspan="typeKey === 'chat' ? 4 : 3"
+                      class="h-24 text-center"
+                    >
+                      该类型下没有可用的模型。
                     </TableCell>
                   </TableRow>
-                </template>
-                <TableRow v-else>
-                  <TableCell
-                    :colspan="typeKey === 'chat' ? 4 : 3"
-                    class="h-24 text-center"
-                  >
-                    该类型下没有可用的模型。
-                  </TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
+                </TableBody>
+              </Table>
+            </div>
           </TabsContent>
         </Tabs>
       </CardContent>
-      <CardFooter>
-        <Button @click="openAddDialog">添加新模型</Button>
+      <CardFooter class="mt-2">
+        <Button class="w-full md:w-auto" @click="openAddDialog"
+          >添加新模型</Button
+        >
       </CardFooter>
     </Card>
 
     <Dialog :open="isDialogOpen" @update:open="isDialogOpen = $event">
-      <DialogContent class="sm:max-w-[525px]">
+      <!-- [MODIFIED] Dialog 宽度适配 -->
+      <DialogContent class="w-[90%] rounded-lg sm:max-w-[525px]">
         <DialogHeader>
           <DialogTitle>{{ isEditing ? "编辑模型" : "添加新模型" }}</DialogTitle>
           <DialogDescription>
@@ -149,91 +165,112 @@
           </DialogDescription>
         </DialogHeader>
 
-        <div v-if="editingModel" class="grid gap-6 py-4">
-          <!-- Model Type Selector (only for new models) -->
-          <div class="grid grid-cols-4 items-center gap-4">
-            <Label for="model-type" class="text-right">模型类型</Label>
-            <Select v-model="editingModel.typeKey" :disabled="isEditing">
-              <SelectTrigger id="model-type" class="col-span-3">
-                <SelectValue placeholder="选择类型" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem
-                  v-for="(label, key) in modelTypeMap"
-                  :key="key"
-                  :value="key"
-                >
-                  {{ label }}
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <!-- Model Name -->
-          <div class="grid grid-cols-4 items-center gap-4">
-            <Label for="model-name" class="text-right">模型名称</Label>
-            <Input
-              id="model-name"
-              v-model="editingModel.name"
-              class="col-span-3"
-              placeholder="例如 gpt-4-turbo"
-            />
-          </div>
-
-          <!-- Enabled Switch -->
-          <div class="grid grid-cols-4 items-center gap-4">
-            <Label for="model-enabled" class="text-right">状态</Label>
-            <Switch id="model-enabled" v-model="editingModel.enabled" />
-          </div>
-
-          <!-- Capabilities (for Chat models only) -->
-          <template v-if="editingModel.isChat">
-            <Separator />
-            <div class="grid grid-cols-4 items-start gap-4">
-              <Label class="text-right pt-2">功能</Label>
-              <div class="col-span-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
-                <Button
-                  v-for="cap in allCapabilities"
-                  :key="cap"
-                  :variant="
-                    editingModel.capabilities.includes(cap)
-                      ? 'secondary'
-                      : 'outline'
-                  "
-                  @click="toggleCapability(cap)"
-                  class="h-auto text-xs py-2"
-                >
-                  <component :is="capabilityIcons[cap]" class="h-4 w-4 mr-2" />
-                  {{ cap }}
-                </Button>
-              </div>
+        <ScrollArea class="max-h-[60vh]">
+          <!-- 防止内容过长超出屏幕 -->
+          <div v-if="editingModel" class="grid gap-6 py-4 px-1">
+            <!-- Model Type Selector (only for new models) -->
+            <div class="grid grid-cols-4 items-center gap-4">
+              <Label for="model-type" class="text-right text-xs md:text-sm"
+                >模型类型</Label
+              >
+              <Select v-model="editingModel.typeKey" :disabled="isEditing">
+                <SelectTrigger id="model-type" class="col-span-3">
+                  <SelectValue placeholder="选择类型" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem
+                    v-for="(label, key) in modelTypeMap"
+                    :key="key"
+                    :value="key"
+                  >
+                    {{ label }}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-          </template>
-        </div>
 
-        <DialogFooter>
+            <!-- Model Name -->
+            <div class="grid grid-cols-4 items-center gap-4">
+              <Label for="model-name" class="text-right text-xs md:text-sm"
+                >模型名称</Label
+              >
+              <Input
+                id="model-name"
+                v-model="editingModel.name"
+                class="col-span-3"
+                placeholder="例如 gpt-4-turbo"
+              />
+            </div>
+
+            <!-- Enabled Switch -->
+            <div class="grid grid-cols-4 items-center gap-4">
+              <Label for="model-enabled" class="text-right text-xs md:text-sm"
+                >状态</Label
+              >
+              <Switch id="model-enabled" v-model="editingModel.enabled" />
+            </div>
+
+            <!-- Capabilities (for Chat models only) -->
+            <template v-if="editingModel.isChat">
+              <Separator />
+              <div class="grid grid-cols-4 items-start gap-4">
+                <Label class="text-right pt-2 text-xs md:text-sm">功能</Label>
+                <div class="col-span-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <Button
+                    v-for="cap in allCapabilities"
+                    :key="cap"
+                    :variant="
+                      editingModel.capabilities.includes(cap)
+                        ? 'secondary'
+                        : 'outline'
+                    "
+                    @click="toggleCapability(cap)"
+                    class="h-auto text-xs py-2 justify-start"
+                  >
+                    <component
+                      :is="capabilityIcons[cap]"
+                      class="h-4 w-4 mr-2 shrink-0"
+                    />
+                    {{ cap }}
+                  </Button>
+                </div>
+              </div>
+            </template>
+          </div>
+        </ScrollArea>
+
+        <DialogFooter class="flex-col gap-2 sm:flex-row">
           <Button
             v-if="isEditing"
             variant="destructive"
             @click="handleDelete"
-            class="mr-auto"
+            class="sm:mr-auto w-full sm:w-auto"
             >删除</Button
           >
-          <Button type="button" variant="ghost" @click="isDialogOpen = false"
-            >取消</Button
-          >
-          <Button
-            type="submit"
-            @click="handleSave"
-            :disabled="!editingModel?.name"
-            >保存</Button
-          >
+          <div class="flex gap-2 w-full sm:w-auto">
+            <Button
+              type="button"
+              variant="ghost"
+              @click="isDialogOpen = false"
+              class="flex-1 sm:flex-none"
+              >取消</Button
+            >
+            <Button
+              type="submit"
+              @click="handleSave"
+              :disabled="!editingModel?.name"
+              class="flex-1 sm:flex-none"
+              >保存</Button
+            >
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   </div>
 </template>
+
 <script setup lang="ts">
+// (JS逻辑保持不变，除了 UI 相关的响应式微调)
 import { ref, type Component, watch } from "vue";
 import {
   Image as ImageIcon,
@@ -298,6 +335,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Input from "@/components/ui/input/Input.vue";
 import Label from "@/components/ui/label/Label.vue";
 import Separator from "@/components/ui/separator/Separator.vue";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 // --- Types ---
 type ProviderModels = ProviderData["models"];

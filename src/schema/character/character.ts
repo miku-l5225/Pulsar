@@ -47,7 +47,11 @@ class CharacterWrapper {
    * @returns {string} 第一个角色的描述，如果不存在则为空字符串。
    */
   toString(): string {
-    return this.resources[0]?.content.description ?? "";
+    return (
+      this.resources[0]?.content.personality +
+      this.resources[0]?.content.mes_example +
+      this.resources[0]?.content.scenario
+    );
   }
 
   /**

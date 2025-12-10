@@ -1,17 +1,15 @@
 <script lang="ts">
 import { type InjectionKey, type Ref, inject } from "vue";
 import type { FlatChatMessage } from "./chat.types";
-
+// ... (Context 部分保持不变)
 export interface MessageContext {
   message: Ref<FlatChatMessage>;
   index: Ref<number>;
   updateContent: (newContent: string) => void;
   dispatchAction: (action: string) => void;
 }
-
 export const MessageContextKey: InjectionKey<MessageContext> =
   Symbol("MessageContext");
-
 export function useMessageContext() {
   const context = inject(MessageContextKey);
   if (!context) throw new Error("useMessageContext missing");
@@ -29,6 +27,7 @@ import {
   toRef,
 } from "vue";
 import { type role } from "../shared.types";
+import { isMobile } from "@/utils/platform"; // 导入
 
 // UI Components
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -40,9 +39,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
   DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubTrigger,
-  DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu";
 import {
   Tooltip,
@@ -75,12 +71,10 @@ import {
   ChevronRight,
   GitBranchPlus,
   Volume2,
-  Languages,
   Check,
   Plus,
-  Tag,
 } from "lucide-vue-next";
-import { useClipboard } from "@vueuse/core"; // Optional hook
+import { useClipboard } from "@vueuse/core";
 
 const MarkdownRender = defineAsyncComponent(() => import("markstream-vue"));
 
@@ -98,6 +92,7 @@ const emit = defineEmits<{
 }>();
 
 // --- Logic ---
+const mobile = isMobile(); // 移动端判断
 const isEditing = ref(false);
 const editingContent = ref("");
 const { copy, copied } = useClipboard({ legacy: true });
@@ -123,11 +118,10 @@ function saveEdit() {
 function handleCopy() {
   if (props.message.content.type === "message") {
     copy(props.message.content.content);
-    // 如果没有 vueuse，这里写 navigator.clipboard.writeText
   }
 }
 
-// Provide Context
+// Provide Context (保持不变)
 const messageRef = toRef(props, "message");
 const indexRef = toRef(props, "index");
 provide(MessageContextKey, {
@@ -137,15 +131,12 @@ provide(MessageContextKey, {
   dispatchAction: (a) => emit("action", a),
 });
 
-// UI Helpers
 const roleIcons: Record<role, Component> = {
   user: User,
   assistant: Bot,
   system: Cog,
 };
 
-// 气泡样式微调：移除大色块背景，更接近截图的干净风格
-// Assistant: 透明/卡片背景, User: 只有文字或轻微背景
 const bubbleContainerClass = computed(() => {
   if (props.message.role === "user") return "flex-row-reverse";
   return "flex-row";
@@ -154,18 +145,14 @@ const bubbleContainerClass = computed(() => {
 const contentContainerClass = computed(() => {
   if (props.message.role === "user")
     return "bg-secondary/50 text-secondary-foreground rounded-[20px] rounded-tr-md";
-  // Assistant 消息背景透明，依靠 Markdown 渲染
   return "bg-transparent px-0";
 });
 
 const hasBranches = computed(() => props.message.availableAlternativeCount > 1);
-
-// 4. 新增：重命名状态管理
 const isRenameOpen = ref(false);
 const renameInput = ref("");
 
 function openRenameDialog() {
-  // 获取当前名称（如果有），没有则为空字符串
   renameInput.value = props.message.content.name || "";
   isRenameOpen.value = true;
 }
@@ -177,14 +164,17 @@ function saveRename() {
 </script>
 
 <template>
+  <!-- 适配：移动端减少 gap -->
   <div
-    class="group flex w-full mb-6 animate-in fade-in slide-in-from-bottom-2 duration-300 gap-4"
-    :class="bubbleContainerClass"
+    class="group flex w-full mb-6 animate-in fade-in slide-in-from-bottom-2 duration-300"
+    :class="[bubbleContainerClass, mobile ? 'gap-2' : 'gap-4']"
   >
     <!-- 1. 头像 -->
     <div class="shrink-0 mt-0.5">
+      <!-- 适配：移动端头像缩小 -->
       <Avatar
-        class="h-9 w-9 shadow-sm border bg-background/50 backdrop-blur-sm"
+        class="shadow-sm border bg-background/50 backdrop-blur-sm"
+        :class="mobile ? 'h-7 w-7' : 'h-9 w-9'"
       >
         <AvatarImage v-if="message.role !== 'user'" :src="avatarSrc" />
         <AvatarFallback class="bg-muted">
@@ -194,10 +184,16 @@ function saveRename() {
     </div>
 
     <!-- 2. 内容区域 -->
+    <!-- 适配：移动端最大宽度增加，保证阅读体验 -->
     <div
-      class="flex flex-col max-w-[90%] lg:max-w-[85%] min-w-[200px] relative"
+      class="flex flex-col relative"
+      :class="
+        mobile
+          ? 'max-w-[95%] min-w-[120px]'
+          : 'max-w-[90%] lg:max-w-[85%] min-w-[200px]'
+      "
     >
-      <!-- 消息头：角色名 + 模型名 (仅 Assistant) -->
+      <!-- 消息头：角色名 -->
       <div
         v-if="message.role !== 'user'"
         class="flex items-center gap-2 mb-1.5 px-1"
@@ -265,8 +261,6 @@ function saveRename() {
               class="prose dark:prose-invert prose-neutral max-w-none text-[15px] leading-6 wrap-break-word"
             />
           </div>
-
-          <!-- 分支节点显示 -->
           <div
             v-else
             class="flex items-center gap-2 p-3 rounded-lg bg-muted/30 border border-dashed"
@@ -278,37 +272,39 @@ function saveRename() {
           </div>
         </div>
       </div>
+
       <!-- C. 底部/悬浮 操作栏 -->
+      <!-- 适配：关键修改，mobile ? 'opacity-100' : 'group-hover:opacity-100' -->
       <div
-        class="flex items-center gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-        :class="message.role === 'user' ? 'justify-end' : 'justify-start'"
+        class="flex items-center gap-1 mt-1 transition-opacity duration-200"
+        :class="[
+          message.role === 'user' ? 'justify-end' : 'justify-start',
+          mobile ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
+        ]"
       >
-        <!-- 分支切换 (如果有) -->
+        <!-- 分支切换 -->
         <div
           v-if="hasBranches"
           class="flex items-center gap-0.5 h-6 select-none animate-in fade-in duration-300"
         >
-          <!-- 上一个 -->
           <button
-            class="flex items-center justify-center h-6 w-5 rounded-sm text-muted-foreground/60 hover:text-foreground hover:bg-muted transition-colors disabled:opacity-20 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+            class="flex items-center justify-center h-8 w-6 sm:h-6 sm:w-5 rounded-sm text-muted-foreground/60 hover:text-foreground hover:bg-muted transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
             :disabled="message.activeAlternative === 0"
             @click="$emit('switch-alt', message.activeAlternative - 1)"
           >
             <ChevronLeft class="w-3.5 h-3.5" />
           </button>
 
-          <!-- 计数器 -->
           <span
-            class="text-xs font-mono text-muted-foreground/80 min-w-[2rem] text-center leading-none pt-0.5"
+            class="text-xs font-mono text-muted-foreground/80 min-w-8 text-center leading-none pt-0.5"
           >
             {{ message.activeAlternative + 1 }}/{{
               message.availableAlternativeCount
             }}
           </span>
 
-          <!-- 下一个 -->
           <button
-            class="flex items-center justify-center h-6 w-5 rounded-sm text-muted-foreground/60 hover:text-foreground hover:bg-muted transition-colors disabled:opacity-20 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+            class="flex items-center justify-center h-8 w-6 sm:h-6 sm:w-5 rounded-sm text-muted-foreground/60 hover:text-foreground hover:bg-muted transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
             :disabled="
               message.activeAlternative >= message.availableAlternativeCount - 1
             "
@@ -320,13 +316,15 @@ function saveRename() {
 
         <!-- 快捷操作按钮 -->
         <div class="flex items-center gap-0.5">
-          <TooltipProvider>
+          <!-- 移动端如果不方便点击，可以考虑隐藏部分不常用的，只保留更多菜单，这里保留全部但增大触摸区域 -->
+          <TooltipProvider :disabled="mobile">
+            <!-- 移动端禁用 tooltip 防止遮挡 -->
             <Tooltip>
               <TooltipTrigger as-child>
                 <Button
                   variant="ghost"
                   size="icon"
-                  class="h-6 w-6 text-muted-foreground/60 hover:text-foreground"
+                  class="h-6 w-6 sm:h-6 sm:w-6 md:h-6 md:w-6 text-muted-foreground/60 hover:text-foreground"
                   @click="handleCopy"
                 >
                   <Check v-if="copied" class="w-3.5 h-3.5 text-green-500" />
@@ -391,41 +389,32 @@ function saveRename() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" class="w-48">
-              <DropdownMenuItem @click="startEdit">
-                <Edit2 class="mr-2 h-4 w-4" /> 编辑
-              </DropdownMenuItem>
-              <DropdownMenuItem @click="openRenameDialog">
-                <Tag class="mr-2 h-4 w-4" /> 重命名
-              </DropdownMenuItem>
-              <DropdownMenuItem @click="handleCopy">
-                <Copy class="mr-2 h-4 w-4" /> 复制
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Volume2 class="mr-2 h-4 w-4" /> 语音朗读
-              </DropdownMenuItem>
-              <DropdownMenuSub>
-                <DropdownMenuSubTrigger>
-                  <Languages class="mr-2 h-4 w-4" /> 翻译
-                </DropdownMenuSubTrigger>
-                <DropdownMenuSubContent>
-                  <DropdownMenuItem>英语</DropdownMenuItem>
-                  <DropdownMenuItem>日语</DropdownMenuItem>
-                </DropdownMenuSubContent>
-              </DropdownMenuSub>
+              <DropdownMenuItem @click="startEdit"
+                ><Edit2 class="mr-2 h-4 w-4" /> 编辑</DropdownMenuItem
+              >
+              <DropdownMenuItem @click="openRenameDialog"
+                ><Tag class="mr-2 h-4 w-4" /> 重命名</DropdownMenuItem
+              >
+              <DropdownMenuItem @click="handleCopy"
+                ><Copy class="mr-2 h-4 w-4" /> 复制</DropdownMenuItem
+              >
+              <DropdownMenuItem
+                ><Volume2 class="mr-2 h-4 w-4" /> 语音朗读</DropdownMenuItem
+              >
               <DropdownMenuSeparator />
-              <DropdownMenuItem @click="$emit('action', 'regenerate')">
-                <RotateCcw class="mr-2 h-4 w-4" /> 重新生成
-              </DropdownMenuItem>
-              <DropdownMenuItem @click="$emit('action', 'branch')">
-                <GitBranchPlus class="mr-2 h-4 w-4" /> 创建分支
-              </DropdownMenuItem>
+              <DropdownMenuItem @click="$emit('action', 'regenerate')"
+                ><RotateCcw class="mr-2 h-4 w-4" /> 重新生成</DropdownMenuItem
+              >
+              <DropdownMenuItem @click="$emit('action', 'branch')"
+                ><GitBranchPlus class="mr-2 h-4 w-4" />
+                创建分支</DropdownMenuItem
+              >
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 class="text-destructive focus:text-destructive"
                 @click="$emit('action', 'delete')"
+                ><Trash2 class="mr-2 h-4 w-4" /> 删除</DropdownMenuItem
               >
-                <Trash2 class="mr-2 h-4 w-4" /> 删除
-              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -433,17 +422,18 @@ function saveRename() {
     </div>
   </div>
 
+  <!-- 重命名 Dialog 保持不变 -->
   <Dialog v-model:open="isRenameOpen">
     <DialogContent class="sm:max-w-[425px]">
       <DialogHeader>
         <DialogTitle>重命名节点</DialogTitle>
-        <DialogDescription>
-          为当前消息版本或分支设置一个名称，方便识别。
-        </DialogDescription>
+        <DialogDescription
+          >为当前消息版本或分支设置一个名称。</DialogDescription
+        >
       </DialogHeader>
       <div class="grid gap-4 py-4">
         <div class="grid grid-cols-4 items-center gap-4">
-          <Label for="name" class="text-right"> 名称 </Label>
+          <Label for="name" class="text-right">名称</Label>
           <Input
             id="name"
             v-model="renameInput"
@@ -463,27 +453,16 @@ function saveRename() {
 </template>
 
 <style scoped>
-/*
-  核心修复：移除 Markdown 渲染后的首尾元素外边距
-  这解决了气泡“看起来很高”但只有一行字的问题
-*/
 :deep(.prose > :first-child) {
   margin-top: 0 !important;
 }
-
 :deep(.prose > :last-child) {
   margin-bottom: 0 !important;
 }
-
-/* 针对用户消息的特殊处理：完全移除段落间距，使其看起来像纯文本 */
 .user-bubble :deep(.prose p) {
   margin-top: 0 !important;
   margin-bottom: 0 !important;
 }
-
-/*
-  辅助修复：列表样式 (你上一个问题的修复)
-*/
 :deep(.prose ol) {
   list-style-type: decimal;
   padding-left: 1.2em;

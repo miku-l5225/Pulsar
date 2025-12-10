@@ -1,3 +1,4 @@
+// src/schema/manifest/manifest.ts
 import type { ManifestContent } from "./manifest.types";
 import { SchemaDefinition } from "../SemanticType";
 import ManifestEditor from "./ManifestEditor.vue";

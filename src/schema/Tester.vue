@@ -1,4 +1,4 @@
-<!-- src/schema/Tester.vue  -->
+<!-- src/schema/Tester.vue -->
 <script setup lang="ts">
 import Textarea from "@/components/ui/textarea/Textarea.vue";
 // import MarkdownRenderer from "markstream-vue";

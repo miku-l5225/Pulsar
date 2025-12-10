@@ -978,6 +978,41 @@ export const useFileSystemStore = defineStore("newFileSystem", () => {
     return root.value.resolve(path);
   };
 
+  /**
+   * 通用方法：解析给定路径所属的“包”根文件夹
+   * “包”的定义是：该文件夹下包含 manifest.[manifest].json
+   * @param path 任意文件或文件夹路径
+   */
+  const resolvePackageFolder = (path: string): VirtualFolder => {
+    // 1. 解析当前节点
+    const node = root.value.resolve(path);
+    if (!node) {
+      throw new Error(`Path does not exist: ${path}`);
+    }
+
+    // 2. 确定起始遍历的文件夹
+    let currentFolder: VirtualFolder | null =
+      node instanceof VirtualFolder ? node : node.parent;
+
+    // 3. 向上遍历寻找 manifest
+    while (currentFolder) {
+      // 检查当前文件夹是否存在 manifest 文件
+      if (currentFolder.children.has("manifest.[manifest].json")) {
+        return currentFolder;
+      }
+
+      // 如果已经到达根目录仍未找到，停止
+      if (!currentFolder.parent) break;
+
+      // 继续向上
+      currentFolder = currentFolder.parent;
+    }
+
+    throw new Error(
+      `Package root not found for path: ${path} (No manifest found in ancestry)`
+    );
+  };
+
   return {
     root,
     contentCache,
@@ -988,6 +1023,7 @@ export const useFileSystemStore = defineStore("newFileSystem", () => {
     init,
     refresh,
     resolvePath,
+    resolvePackageFolder,
     restoreTrashItem,
     _readManifest,
     _writeManifest,

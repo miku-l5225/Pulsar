@@ -1,3 +1,4 @@
+<!-- src/schema/FileRenderer.vue -->
 <script setup lang="ts">
 import {
   computed,

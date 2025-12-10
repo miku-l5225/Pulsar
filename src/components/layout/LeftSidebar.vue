@@ -1,3 +1,4 @@
+<!-- src/components/layout/LeftSidebar.vue -->
 <script setup lang="ts">
 import { type PropType, type Component, computed, watchEffect, ref } from "vue";
 import { useColorMode, useStorage, onClickOutside } from "@vueuse/core";
@@ -8,28 +9,30 @@ import {
   Check,
   CheckCircle2,
   Circle,
-} from "lucide-vue-next"; // 引入 CheckCircle 用于菜单
+} from "lucide-vue-next";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import draggable from "vuedraggable"; // 引入 vuedraggable
+import draggable from "vuedraggable";
 import { SidebarView, useUIStore } from "@/features/UI/UI.store";
 import {
   useCustomPageStore,
   type CustomPage,
-} from "@/features/CustomPage/CustomPage.store"; // 引入 Store 以便操作排序和显隐
+} from "@/features/CustomPage/CustomPage.store";
 
 type OnClickAction = string | Function;
+
+// 扩展 ButtonConfig 接口，增加 isActive 可选属性
 interface ButtonConfig {
   svg: Component;
   onClick: OnClickAction;
   title?: string;
+  isActive?: boolean; // 新增：允许外部传入激活状态
 }
 type ButtonGroup = ButtonConfig[];
 
-// 定义 Props，新增 customPages
 const props = defineProps({
   top: { type: Array as PropType<ButtonGroup>, required: true },
   bottom: { type: Array as PropType<ButtonGroup>, required: true },
@@ -46,15 +49,13 @@ const dragOptions = {
   animation: 200,
   group: "sidebar-custom-icons",
   ghostClass: "ghost-icon",
-  delay: 100, // 防止误触点击
+  delay: 100,
   delayOnTouchOnly: true,
 };
 
-// 使用 computed 的 get/set 桥接 vuedraggable 和 Pinia Store
 const draggableCustomPages = computed({
   get: () => props.customPages,
   set: (newVal: CustomPage[]) => {
-    // 提取新的顺序 name 列表并更新 Store
     const newOrder = newVal.map((p) => p.name);
     customPageStore.setOrder(newOrder);
   },
@@ -67,7 +68,6 @@ const showContextMenu = ref(false);
 const contextMenuPos = ref({ x: 0, y: 0 });
 const contextMenuRef = ref<HTMLElement | null>(null);
 
-// 点击外部关闭菜单
 onClickOutside(contextMenuRef, () => {
   showContextMenu.value = false;
 });
@@ -78,14 +78,9 @@ const handleContextMenu = (e: MouseEvent) => {
   contextMenuPos.value = { x: e.clientX, y: e.clientY };
 };
 
-// 菜单项点击逻辑
 const togglePageVisibility = (page: CustomPage) => {
   const isCurrentlyHidden = !page.isVisible;
-
-  // 1. 切换显隐
   customPageStore.toggleVisibility(page.name);
-
-  // 2. 如果是从隐藏变为显示，则立即打开
   if (isCurrentlyHidden) {
     uiStore.openFile(page.entry);
   }
@@ -174,13 +169,18 @@ watchEffect(() => {
   }
 });
 
-const isActionActive = (action: OnClickAction): boolean => {
-  if (typeof action === "string")
-    return uiStore.uiState.leftSidebarView === action;
+// 修改判断激活状态的逻辑，支持传入 item 对象检查 isActive
+const isItemActive = (item: ButtonConfig): boolean => {
+  // 1. 如果配置了 isActive 属性，优先使用
+  if (item.isActive !== undefined) return item.isActive;
+
+  // 2. 否则按原有逻辑判断 LeftSidebarView
+  if (typeof item.onClick === "string") {
+    return uiStore.uiState.leftSidebarView === item.onClick;
+  }
   return false;
 };
 
-// 判断 CustomPage 是否处于激活状态 (比对当前 activeFile)
 const isCustomPageActive = (entry: string): boolean => {
   return uiStore.uiState.activeFile === entry;
 };
@@ -199,7 +199,6 @@ const handleButtonClick = (action: OnClickAction) => {
 </script>
 
 <template>
-  <!-- 绑定右键事件到整个导航栏或特定区域 -->
   <nav
     class="bg-sidebar text-sidebar-foreground flex h-full w-[54px] flex-col transition-all duration-200 z-10 relative"
     @contextmenu="handleContextMenu"
@@ -215,14 +214,14 @@ const handleButtonClick = (action: OnClickAction) => {
           @click="handleButtonClick(item.onClick)"
           class="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-md transition-colors hover:bg-sidebar-accent"
           :class="{
-            'bg-sidebar-accent': isActionActive(item.onClick),
+            'bg-sidebar-accent': isItemActive(item),
           }"
         >
           <component
             :is="item.svg"
             class="shrink-0 size-[18px]"
             :class="
-              isActionActive(item.onClick)
+              isItemActive(item)
                 ? 'text-sidebar-accent-foreground'
                 : 'text-sidebar-foreground'
             "
@@ -231,7 +230,6 @@ const handleButtonClick = (action: OnClickAction) => {
       </template>
 
       <!-- 2. 可拖拽的自定义页面区域 -->
-      <!-- 使用 item-key="name" 确保唯一性 -->
       <draggable
         v-model="draggableCustomPages"
         item-key="name"
@@ -247,7 +245,6 @@ const handleButtonClick = (action: OnClickAction) => {
               'bg-sidebar-accent': isCustomPageActive(element.entry),
             }"
           >
-            <!-- 渲染图片图标 -->
             <img
               v-if="element.icon"
               :src="element.icon"
@@ -255,7 +252,6 @@ const handleButtonClick = (action: OnClickAction) => {
               draggable="false"
               alt=""
             />
-            <!-- 也可以加一个 Fallback Icon -->
             <div v-else class="size-[18px] bg-muted rounded-sm"></div>
           </button>
         </template>
@@ -287,15 +283,11 @@ const handleButtonClick = (action: OnClickAction) => {
                 <div class="flex items-center gap-1.5">
                   <div
                     class="size-3 rounded-full"
-                    :style="{
-                      backgroundColor: theme.colors[0],
-                    }"
+                    :style="{ backgroundColor: theme.colors[0] }"
                   ></div>
                   <div
                     class="size-3 rounded-full"
-                    :style="{
-                      backgroundColor: theme.colors[1],
-                    }"
+                    :style="{ backgroundColor: theme.colors[1] }"
                   ></div>
                 </div>
                 <span>{{ theme.name }}</span>
@@ -322,32 +314,34 @@ const handleButtonClick = (action: OnClickAction) => {
           :title="item.title"
           @click="handleButtonClick(item.onClick)"
           class="flex size-8 cursor-pointer items-center justify-center rounded-md transition-colors hover:bg-sidebar-accent"
+          :class="{
+            'bg-sidebar-accent': isItemActive(item),
+          }"
         >
           <component
             :is="item.svg"
-            class="size-[18px] text-sidebar-foreground"
+            class="size-[18px]"
+            :class="
+              isItemActive(item)
+                ? 'text-sidebar-accent-foreground'
+                : 'text-sidebar-foreground'
+            "
           />
         </button>
       </template>
     </div>
 
-    <!-- 自定义右键菜单 (使用 Teleport 挂载到 body 避免被 overflow 裁剪) -->
     <Teleport to="body">
       <div
         v-if="showContextMenu"
         ref="contextMenuRef"
-        class="fixed z-50 min-w-40 overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2"
-        :style="{
-          top: `${contextMenuPos.y}px`,
-          left: `${contextMenuPos.x}px`,
-        }"
+        class="fixed z-50 min-w-40 overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
+        :style="{ top: `${contextMenuPos.y}px`, left: `${contextMenuPos.x}px` }"
       >
         <div class="px-2 py-1.5 text-sm font-semibold text-muted-foreground">
           显示/隐藏页面
         </div>
         <div class="h-px bg-border my-1" />
-
-        <!-- 遍历所有页面 (包括隐藏的) -->
         <button
           v-for="page in customPageStore.allPages"
           :key="page.name"
@@ -357,7 +351,6 @@ const handleButtonClick = (action: OnClickAction) => {
           <span
             class="absolute left-2 flex h-3.5 w-3.5 items-center justify-center"
           >
-            <!-- 如果可见，显示勾选 -->
             <CheckCircle2 v-if="page.isVisible" class="h-4 w-4" />
             <Circle v-else class="h-4 w-4 text-muted-foreground/30" />
           </span>
@@ -372,14 +365,13 @@ const handleButtonClick = (action: OnClickAction) => {
 .ghost-icon {
   opacity: 0.5;
   background-color: hsl(var(--sidebar-accent));
-  border-radius: 0.375rem; /* rounded-md */
+  border-radius: 0.375rem;
 }
-/* 隐藏滚动条 */
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
 .no-scrollbar {
-  -ms-overflow-style: none; /* IE and Edge */
-  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 </style>

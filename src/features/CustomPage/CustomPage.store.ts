@@ -1,3 +1,4 @@
+// src/features/CustomPage/CustomPage.store.ts
 import { defineStore } from "pinia";
 import { ref, computed, watch, reactive } from "vue";
 import {

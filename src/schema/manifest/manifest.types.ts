@@ -1,3 +1,4 @@
+// src/schema/manifest/manifest.types.ts
 import { SemanticType } from "@/schema/SemanticType";
 
 // ==========================================

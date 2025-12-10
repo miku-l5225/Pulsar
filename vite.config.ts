@@ -2,13 +2,13 @@ import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
 import path from "node:path";
 import tailwindcss from "@tailwindcss/vite";
-// import vueDevTools from "vite-plugin-vue-devtools";
+import vueDevTools from "vite-plugin-vue-devtools";
 
 const host = process.env.TAURI_DEV_HOST;
 
 // https://vite.dev/config/
 export default defineConfig(async () => ({
-  plugins: [vue(), tailwindcss()],
+  plugins: [vue(), tailwindcss(), vueDevTools()],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

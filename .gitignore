@@ -10,6 +10,7 @@ lerna-debug.log*
 src-tauri/binaries
 src-tauri/target
 *.todo
+stats.html
 Todo.todo
 backup
 node_modules

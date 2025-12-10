@@ -225,6 +225,9 @@ import { useSecretsStore } from "@/features/Secrets/Secrets.store";
 import { Pencil, Trash2 } from "lucide-vue-next";
 import { push } from "notivue";
 
+// 引入 customFetch
+import { customFetch } from "@/utils/customFetch";
+
 // --- 子组件和UI组件导入 ---
 import ProviderModelsTable from "./components/ProviderModelsTable.vue";
 import Separator from "@/components/ui/separator/Separator.vue";
@@ -323,7 +326,6 @@ async function handleWriteKey() {
   }
 }
 
-// [ADDED] Function to fetch and merge models
 async function fetchModelsFromEndpoint() {
   if (
     !selectedProviderData.value?.url ||
@@ -337,7 +339,19 @@ async function fetchModelsFromEndpoint() {
   const fetchUrl = `${endpoint}/models`;
 
   try {
-    const response = await fetch(fetchUrl);
+    // 构造 Headers，注入 {{API_KEY_NAME}} 供后端代理替换
+    const headers: HeadersInit = {};
+    const apiKeyName = selectedProviderData.value.apiKeyName;
+    if (apiKeyName) {
+      headers["Authorization"] = `Bearer {{${apiKeyName}}}`;
+    }
+
+    // 使用 customFetch 替代 fetch
+    const response = await customFetch(fetchUrl, {
+      method: "GET",
+      headers,
+    });
+
     if (!response.ok) {
       throw new Error(`请求失败，状态码: ${response.status}`);
     }

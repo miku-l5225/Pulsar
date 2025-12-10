@@ -1,14 +1,6 @@
 <!-- src/schema/chat/ChatEditor.vue -->
 <script setup lang="ts">
-import {
-  computed,
-  onMounted,
-  type CSSProperties,
-  nextTick,
-  ref,
-  isRef,
-  triggerRef,
-} from "vue";
+import { computed, onMounted, type CSSProperties, nextTick, ref } from "vue";
 import { push } from "notivue";
 
 // Features & Composables
@@ -27,6 +19,8 @@ import ChatInputArea from "./ChatInputArea.vue";
 import { Button } from "@/components/ui/button";
 import { ArrowDown } from "lucide-vue-next";
 import ChatBubble from "./ChatBubble.vue";
+import { isMobile } from "@/utils/platform";
+const mobile = isMobile(); // 获取移动端状态
 
 const props = defineProps<{ path: string }>();
 
@@ -222,7 +216,7 @@ const backgroundStyle = computed<CSSProperties>(() => {
     v-if="chatReactive"
     class="flex h-full flex-col bg-background/50 relative overflow-hidden rounded-xl border shadow-sm group/editor"
   >
-    <!-- 背景层 -->
+    <!-- 背景层 (保持不变) -->
     <div
       v-if="background"
       class="absolute inset-0 z-0 select-none pointer-events-none"
@@ -241,8 +235,10 @@ const backgroundStyle = computed<CSSProperties>(() => {
     <!-- 消息列表 -->
     <div class="relative z-10 flex-1 min-h-0 flex flex-col">
       <ScrollArea ref="messageListRef" class="h-full" @scroll="handleScroll">
+        <!-- 适配：移动端 px-2, 桌面端 px-4 -->
         <div
-          class="flex flex-col px-4 py-6 max-w-4xl mx-auto w-full min-h-full"
+          class="flex flex-col py-6 max-w-4xl mx-auto w-full min-h-full transition-all duration-300"
+          :class="mobile ? 'px-2' : 'px-4'"
         >
           <ChatBubble
             v-for="(msg, i) in flattenedChat.messages"
@@ -256,18 +252,24 @@ const backgroundStyle = computed<CSSProperties>(() => {
             @rename="(name) => renameAlternative(i, name)"
           />
 
-          <!-- 底部垫高：Input Area 现在是浮动的，需要留出更多空间 -->
-          <div class="h-48"></div>
+          <!-- 底部垫高：Input Area 移动端高度可能不同，稍微调小一点 -->
+          <div :class="mobile ? 'h-36' : 'h-48'"></div>
         </div>
       </ScrollArea>
 
-      <!-- 回到底部悬浮按钮 (位置调整) -->
-      <transition enter-active-class="..." leave-active-class="...">
+      <!-- 回到底部悬浮按钮 -->
+      <transition
+        enter-active-class="transition ease-out duration-300"
+        enter-from-class="opacity-0 translate-y-4"
+        leave-active-class="transition ease-in duration-200"
+        leave-to-class="opacity-0 translate-y-4"
+      >
         <Button
           v-if="!isAtBottom"
           size="icon"
           variant="secondary"
-          class="absolute bottom-28 right-8 rounded-full shadow-lg z-30 opacity-90 hover:opacity-100"
+          class="absolute rounded-full shadow-lg z-30 opacity-90 hover:opacity-100"
+          :class="mobile ? 'bottom-20 right-4' : 'bottom-28 right-8'"
           @click="scrollToBottom('smooth')"
         >
           <ArrowDown class="h-5 w-5" />
@@ -275,9 +277,10 @@ const backgroundStyle = computed<CSSProperties>(() => {
       </transition>
     </div>
 
-    <!-- 底部输入框容器：调整为绝对定位或者浮动层级更高 -->
+    <!-- 底部输入框容器 -->
     <div
-      class="absolute bottom-0 left-0 right-0 z-40 bg-linear-to-t from-background via-background/80 to-transparent pb-4 pt-10 px-4"
+      class="absolute bottom-0 left-0 right-0 z-40 bg-linear-to-t from-background via-background/90 to-transparent"
+      :class="mobile ? 'pb-2 pt-6 px-1' : 'pb-4 pt-10 px-4'"
     >
       <ChatInputArea
         ref="inputAreaRef"
@@ -287,7 +290,7 @@ const backgroundStyle = computed<CSSProperties>(() => {
       />
     </div>
   </div>
-  <!-- Loading State -->
+  <!-- Loading State (保持不变) -->
   <div
     v-else
     class="flex h-full items-center justify-center text-muted-foreground"

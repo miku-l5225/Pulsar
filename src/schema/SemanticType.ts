@@ -90,14 +90,20 @@ export async function createCharacterEnvironment(
   const structure = {
     [charName]: {
       chat: {}, // 空文件夹
-      template: {},
+      template: {
+        ["chat.[chat].json"]: () => getNewTypedFile("chat"),
+      },
       lorebook: {},
       preset: {},
       background: {},
       components: {},
       // 角色定义文件
-      [`${charName}.[character].json`]: () =>
-        getNewTypedFile("character", { name: charName }),
+      character: {
+        charName: {
+          ["index.[character].json"]: () =>
+            getNewTypedFile("character", { name: charName }),
+        },
+      },
       // Manifest 文件
       "manifest.[manifest].json": () => {
         return getNewTypedFile("manifest");

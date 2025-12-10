@@ -85,7 +85,7 @@ const inputValue = computed({
       :min="min"
       :max="allowExceedMax ? undefined : max"
       :step="step"
-      class="w-20"
+      class="w-24"
     />
   </div>
 </template>

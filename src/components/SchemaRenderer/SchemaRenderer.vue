@@ -1,6 +1,5 @@
-<!-- src/components/SchemaRenderer/SchemaRenderer.vue -->
 <script setup lang="ts">
-import { ref, computed, type Component } from "vue";
+import { ref, computed, type Component, onMounted, onUnmounted } from "vue";
 import { get, set } from "lodash-es";
 
 // --- Shadcn UI 组件导入 ---
@@ -25,7 +24,7 @@ import RegexEditor from "./content-elements/RegexEditor.vue";
 import JSCodeEditor from "./content-elements/JSCodeEditor.vue";
 import VariableEditor from "./content-elements/VariableEditor.vue";
 
-import { Group, Schema, ComponentName } from "./SchemaRenderer.types";
+import { Group, Schema, ComponentName, Row } from "./SchemaRenderer.types";
 
 const defaultComponents: Record<string, Component> = {
   Button,
@@ -51,8 +50,11 @@ const emit = defineEmits(["update:data"]);
 
 // --- 状态管理 ---
 const activeGroupIndex = ref(0);
-// [NEW] 控制侧边栏折叠状态
 const isCollapsed = ref(false);
+
+// [NEW] 移动端适配状态
+const isMobile = ref(false);
+const showMobileDetail = ref(false); // 控制移动端是否显示详情页
 
 // --- 计算属性 ---
 
@@ -70,11 +72,28 @@ const activeGroup = computed<Group | undefined>(() => {
 
 // --- 方法 ---
 
+// [MODIFIED] 响应式检测
+function checkMobile() {
+  isMobile.value = window.matchMedia("(max-width: 768px)").matches;
+  if (!isMobile.value) {
+    // 切回桌面端时，重置详情显示状态，保证左右分栏正常
+    showMobileDetail.value = false;
+  }
+}
+
+// [MODIFIED] 点击处理：移动端点击后进入详情页
 function handleGroupClick(group: Group) {
   const index = clickableGroups.value.indexOf(group);
   if (index !== -1) {
     activeGroupIndex.value = index;
+    if (isMobile.value) {
+      showMobileDetail.value = true;
+    }
   }
+}
+
+function handleBackToList() {
+  showMobileDetail.value = false;
 }
 
 function updateData(path: string, value: any) {
@@ -91,22 +110,51 @@ function resolveComponent(name: ComponentName): Component | string {
   console.warn(`Component "${name}" not found.`);
   return name;
 }
+
+// [NEW] 判断是否使用纵向布局 (移动端强制纵向)
+function shouldUseVerticalLayout(row: Row): boolean {
+  if (isMobile.value) return true;
+  return !!row.useTopBottom;
+}
+
+// --- 生命周期 ---
+onMounted(() => {
+  checkMobile();
+  window.addEventListener("resize", checkMobile);
+});
+
+onUnmounted(() => {
+  window.removeEventListener("resize", checkMobile);
+});
 </script>
 
 <template>
-  <div class="flex h-full bg-background text-foreground overflow-hidden">
-    <!-- Left Sidebar -->
+  <div
+    class="flex h-full bg-background text-foreground overflow-hidden relative"
+  >
+    <!--
+      Left Sidebar
+      [MODIFIED] 响应式类名:
+      - 移动端: w-full (全宽), 如果正在显示详情(showMobileDetail)则隐藏(hidden)
+      - 桌面端(md): 按照 isCollapsed 逻辑显示宽度, block (覆盖 hidden)
+    -->
     <aside
       :class="[
-        'border-r flex flex-col min-h-0 transition-all duration-300 ease-in-out relative overflow-hidden',
-        isCollapsed
-          ? 'w-[60px] min-w-[60px] items-center'
-          : 'w-1/4 min-w-[250px]',
+        'border-r flex-col min-h-0 transition-all duration-300 ease-in-out relative overflow-hidden bg-background',
+        isMobile ? 'w-full' : '',
+        !isMobile && isCollapsed
+          ? 'md:w-[60px] md:min-w-[60px] items-center'
+          : 'md:w-1/4 md:min-w-[250px]',
+        isMobile && showMobileDetail ? 'hidden' : 'flex',
       ]"
     >
+      <!--
+        Sidebar Toggle Button
+        [MODIFIED] 移动端隐藏 (hidden md:flex)
+      -->
       <div
         :class="[
-          'flex items-center p-2',
+          'items-center p-2 hidden md:flex',
           isCollapsed ? 'justify-center' : 'justify-end',
         ]"
       >
@@ -117,7 +165,6 @@ function resolveComponent(name: ComponentName): Component | string {
           @click="isCollapsed = !isCollapsed"
           :title="isCollapsed ? '展开侧边栏' : '收起侧边栏'"
         >
-          <!-- 这里使用简单的 SVG 图标，对应 PanelLeftClose / PanelLeftOpen -->
           <svg
             v-if="!isCollapsed"
             xmlns="http://www.w3.org/2000/svg"
@@ -153,14 +200,15 @@ function resolveComponent(name: ComponentName): Component | string {
         </Button>
       </div>
 
-      <!-- Group Meta (Only visible when expanded) -->
+      <!-- Group Meta -->
+      <!-- [MODIFIED] 移动端始终显示 Meta (因为没有 collapse 状态) -->
       <div
         v-if="
-          !isCollapsed &&
+          (!isCollapsed || isMobile) &&
           typeof schema.groupMeta === 'object' &&
           'title' in schema.groupMeta
         "
-        class="px-6 pb-2 min-w-0 w-full"
+        class="px-4 py-2"
       >
         <h2 class="text-lg font-semibold truncate">
           {{ schema.groupMeta.title }}
@@ -172,10 +220,9 @@ function resolveComponent(name: ComponentName): Component | string {
           {{ schema.groupMeta.description }}
         </p>
       </div>
-      <!-- 如果 schema.groupMeta 是组件，也需要处理显隐逻辑，这里简单处理为展开才显示 -->
       <component
         :is="schema.groupMeta"
-        v-else-if="!isCollapsed && schema.groupMeta"
+        v-else-if="(!isCollapsed || isMobile) && schema.groupMeta"
       />
 
       <!-- Separator -->
@@ -185,22 +232,22 @@ function resolveComponent(name: ComponentName): Component | string {
       />
 
       <!-- Navigation List -->
-      <nav class="flex flex-col space-y-1 w-full px-2">
+      <nav class="flex flex-col space-y-1 w-full px-2 overflow-y-auto">
         <template v-for="(item, index) in schema.content" :key="index">
           <template v-if="typeof item === 'object'">
             <button
               @click="handleGroupClick(item)"
               :class="[
-                'flex items-center p-2 rounded-md transition-colors w-full',
-                // [MODIFIED] 折叠时居中，展开时左对齐
-                isCollapsed
+                'flex items-center p-3 md:p-2 rounded-md transition-colors w-full',
+                // [MODIFIED] 移动端总是左对齐，桌面端根据折叠状态调整
+                !isMobile && isCollapsed
                   ? 'justify-center'
-                  : 'justify-start space-x-2 text-left',
+                  : 'justify-start space-x-3 text-left',
                 clickableGroups.indexOf(item) === activeGroupIndex
                   ? 'bg-secondary text-secondary-foreground'
                   : 'hover:bg-muted',
               ]"
-              :title="isCollapsed ? item.title : ''"
+              :title="!isMobile && isCollapsed ? item.title : ''"
             >
               <span
                 v-if="typeof item.svg === 'string'"
@@ -209,8 +256,28 @@ function resolveComponent(name: ComponentName): Component | string {
               ></span>
               <component :is="item.svg" v-else class="w-5 h-5 shrink-0" />
 
-              <!-- [MODIFIED] 文字只在展开时显示 -->
-              <span v-if="!isCollapsed" class="truncate">{{ item.title }}</span>
+              <span
+                v-if="isMobile || !isCollapsed"
+                class="truncate flex-1 text-base md:text-sm"
+              >
+                {{ item.title }}
+              </span>
+              <!-- [NEW] 移动端显示箭头提示 -->
+              <span v-if="isMobile" class="text-muted-foreground">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="m9 18 6-6-6-6" />
+                </svg>
+              </span>
             </button>
           </template>
           <template v-else-if="item === 'Separator'">
@@ -220,17 +287,55 @@ function resolveComponent(name: ComponentName): Component | string {
       </nav>
     </aside>
 
-    <!-- Right Content Panel -->
-    <!-- [MODIFIED] w-3/4 -> flex-1: 让右侧内容自动填充剩余空间 -->
-    <!-- 添加 min-w-0 防止 flex 子元素内容溢出 -->
-    <main v-if="activeGroup" class="flex-1 min-w-0 min-h-0 bg-background/50">
+    <!--
+      Right Content Panel
+      [MODIFIED] 响应式显示逻辑:
+      - 移动端: 默认隐藏(hidden)，只有当 showMobileDetail 为 true 时显示(block/flex)，并且全屏覆盖(w-full h-full absolute/fixed)
+      - 桌面端: 总是显示(md:flex)，位置保持默认
+    -->
+    <main
+      v-if="activeGroup"
+      :class="[
+        'flex-1 min-w-0 min-h-0 bg-background/50',
+        isMobile
+          ? showMobileDetail
+            ? 'absolute inset-0 z-50 bg-background flex flex-col'
+            : 'hidden'
+          : 'flex flex-col',
+      ]"
+    >
       <ScrollArea class="h-full">
-        <div class="max-w-5xl mx-auto px-8 py-8 pb-24">
+        <div class="max-w-5xl mx-auto px-4 md:px-8 py-6 md:py-8 pb-24">
           <!-- Header -->
-          <h1 class="text-3xl font-bold">
-            {{ activeGroup.content.title }}
-          </h1>
-          <Separator class="my-6" />
+          <div class="flex items-center gap-2 mb-2">
+            <!-- [NEW] 移动端返回按钮 -->
+            <Button
+              v-if="isMobile"
+              variant="ghost"
+              size="icon"
+              class="-ml-2 mr-1"
+              @click="handleBackToList"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="m15 18-6-6 6-6" />
+              </svg>
+            </Button>
+
+            <h1 class="text-2xl md:text-3xl font-bold flex-1">
+              {{ activeGroup.content.title }}
+            </h1>
+          </div>
+          <Separator class="my-4 md:my-6" />
 
           <!-- Content Rows -->
           <div class="space-y-4">
@@ -238,20 +343,29 @@ function resolveComponent(name: ComponentName): Component | string {
               v-for="(rowGroup, rgIndex) in activeGroup.content.content"
               :key="rgIndex"
             >
-              <h3 v-if="rowGroup.title" class="text-xl font-semibold mb-4">
+              <h3
+                v-if="rowGroup.title"
+                class="text-lg md:text-xl font-semibold mb-3 md:mb-4"
+              >
                 {{ rowGroup.title }}
               </h3>
-              <div class="space-y-2">
+              <div class="space-y-3">
                 <div
                   v-for="(row, rIndex) in rowGroup.content"
                   :key="`${rgIndex}-${rIndex}`"
                 >
-                  <!-- 布局: Top-Bottom -->
+                  <!--
+                    [MODIFIED] 布局逻辑:
+                    如果 shouldUseVerticalLayout(row) 为 true (包含移动端强制情况)，
+                    使用 Title-Content-Description 的纵向布局。
+                  -->
                   <div
-                    v-if="row.useTopBottom"
-                    class="flex flex-col space-y-2 p-4 border rounded-md bg-card"
+                    v-if="shouldUseVerticalLayout(row)"
+                    class="flex flex-col space-y-2 p-3 md:p-4 border rounded-md bg-card"
                   >
-                    <label class="font-medium">{{ row.title }}</label>
+                    <label class="font-medium text-sm md:text-base">{{
+                      row.title
+                    }}</label>
                     <component
                       :is="resolveComponent(row.component)"
                       v-bind="row.props"
@@ -260,13 +374,16 @@ function resolveComponent(name: ComponentName): Component | string {
                     />
                     <p
                       v-if="row.description"
-                      class="text-sm text-muted-foreground"
+                      class="text-xs md:text-sm text-muted-foreground"
                     >
                       {{ row.description }}
                     </p>
                   </div>
 
-                  <!-- 默认布局: Left-Right -->
+                  <!--
+                    桌面端默认布局: Left-Right (Shadcn Item)
+                    仅当非移动端且配置为非 Vertical 时渲染
+                   -->
                   <Item v-else>
                     <ItemContent>
                       <ItemTitle
@@ -281,8 +398,7 @@ function resolveComponent(name: ComponentName): Component | string {
                       </ItemDescription>
                     </ItemContent>
                     <ItemActions>
-                      <!-- 稍微增加宽度以适应更大的主空间 -->
-                      <div class="w-full max-w-sm flex justify-end">
+                      <div class="w-60 flex justify-end">
                         <component
                           :is="resolveComponent(row.component)"
                           v-bind="row.props"
@@ -306,7 +422,17 @@ function resolveComponent(name: ComponentName): Component | string {
 
 <style>
 :root {
-  font-size: clamp(12px, 1vw + 0.1rem, 14px);
+  font-size: clamp(14px, 1vw + 0.1rem, 15px);
+}
+
+/* 优化移动端点击体验 */
+@media (max-width: 768px) {
+  button,
+  input,
+  select,
+  textarea {
+    min-height: 44px; /* 触控热区 */
+  }
 }
 
 textarea:focus-visible {

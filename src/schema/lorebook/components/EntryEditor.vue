@@ -4,7 +4,6 @@ import { ref, computed, watch } from "vue";
 import type { LorebookEntry } from "@/schema/lorebook/lorebook.types";
 import { cloneDeep } from "lodash-es";
 import {
-  BookOpen,
   Plus,
   Search,
   Zap,
@@ -18,6 +17,7 @@ import {
   Layers,
   SkipForward,
   Copy,
+  Filter,
 } from "lucide-vue-next";
 
 // --- 自定义组件 ---
@@ -77,7 +77,7 @@ const groups = computed(() => {
 });
 
 const getGroupLabel = (group: string) => {
-  if (group === "All") return "全部";
+  if (group === "All") return "全部分组";
   if (group === "Ungrouped") return "未分组";
   return group;
 };
@@ -149,94 +149,67 @@ const duplicateEntry = (entry: LorebookEntry) => {
 </script>
 
 <template>
-  <!-- 主容器：使用 border 和 background 变量 -->
+  <!-- 主容器：改为 flex-col 垂直布局，移除侧边栏 -->
   <div
-    class="flex h-[600px] w-full bg-background border border-border rounded-xl overflow-hidden shadow-sm font-sans"
+    class="flex flex-col h-[600px] w-full bg-background border border-border rounded-xl overflow-hidden shadow-sm font-sans"
   >
-    <!-- 1. 侧边栏: 分组 -->
-    <!-- 使用 sidebar 相关的语义变量 -->
-    <aside
-      class="w-56 bg-sidebar border-r border-sidebar-border flex flex-col shrink-0 text-sidebar-foreground transition-colors"
+    <!-- 工具栏头部 -->
+    <header
+      class="bg-background border-b border-border px-4 py-3 flex items-center gap-3 shrink-0"
     >
-      <div class="p-4 border-b border-sidebar-border flex items-center gap-2">
-        <BookOpen class="text-primary h-5 w-5" />
-        <h2 class="font-bold text-sm tracking-tight">世界书 (Lorebook)</h2>
-      </div>
-
-      <ScrollArea class="flex-1">
-        <div class="p-3">
-          <div
-            class="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2 px-2"
-          >
-            分组列表
-          </div>
-          <nav class="space-y-0.5">
-            <button
-              v-for="group in groups"
-              :key="group"
-              @click="selectedGroup = group"
-              :class="[
-                'w-full text-left px-3 py-2 rounded-md text-xs font-medium transition-colors flex justify-between items-center outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring',
-                selectedGroup === group
-                  ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                  : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground',
-              ]"
-            >
-              <span class="truncate">{{ getGroupLabel(group) }}</span>
-              <Badge
-                variant="secondary"
-                class="ml-2 px-1.5 h-5 min-w-5 flex items-center justify-center text-[10px] shadow-sm"
-                :class="
-                  selectedGroup === group
-                    ? 'bg-background text-foreground'
-                    : 'bg-sidebar-border/50 text-sidebar-foreground'
-                "
+      <!-- 分组筛选 (原侧边栏功能迁移至此) -->
+      <div class="w-[180px] shrink-0">
+        <Select v-model="selectedGroup">
+          <SelectTrigger class="h-9 text-xs">
+            <div class="flex items-center gap-2 truncate">
+              <Filter class="h-3.5 w-3.5 text-muted-foreground" />
+              <span>{{ getGroupLabel(selectedGroup) }}</span>
+            </div>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem v-for="group in groups" :key="group" :value="group">
+              <div
+                class="flex items-center justify-between w-full gap-4 text-xs"
               >
-                {{
-                  group === "All"
-                    ? localEntries.length
-                    : localEntries.filter(
-                        (e) => (e.groupName || "未分组") === group
-                      ).length
-                }}
-              </Badge>
-            </button>
-          </nav>
-        </div>
-      </ScrollArea>
-
-      <div class="p-3 border-t border-sidebar-border bg-sidebar-accent/10">
-        <div class="text-[10px] text-muted-foreground text-center">
-          总条目数: {{ localEntries.length }}
-        </div>
+                <span>{{ getGroupLabel(group) }}</span>
+                <Badge variant="secondary" class="h-4 px-1 text-[10px]">
+                  {{
+                    group === "All"
+                      ? localEntries.length
+                      : localEntries.filter(
+                          (e) => (e.groupName || "未分组") === group
+                        ).length
+                  }}
+                </Badge>
+              </div>
+            </SelectItem>
+          </SelectContent>
+        </Select>
       </div>
-    </aside>
 
-    <!-- 2. 主内容区域 -->
-    <main class="flex-1 flex flex-col min-w-0 bg-muted/20">
-      <!-- 工具栏 -->
-      <header
-        class="bg-background border-b border-border px-4 py-3 flex items-center justify-between gap-4 shrink-0"
-      >
-        <div class="relative max-w-md w-full">
-          <Search
-            class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground h-4 w-4"
-          />
-          <Input
-            v-model="searchQuery"
-            placeholder="搜索触发词、名称或内容..."
-            class="pl-9 h-9 bg-muted/50 border-transparent focus:bg-background focus:border-ring transition-all text-xs shadow-none"
-          />
-        </div>
-        <Button size="sm" class="h-9 px-4 shadow-sm" @click="addEntry">
-          <Plus class="h-4 w-4 mr-2" />
-          添加条目
-        </Button>
-      </header>
+      <!-- 搜索框 -->
+      <div class="relative flex-1">
+        <Search
+          class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground h-4 w-4"
+        />
+        <Input
+          v-model="searchQuery"
+          placeholder="搜索条目..."
+          class="pl-9 h-9 bg-muted/50 border-transparent focus:bg-background focus:border-ring transition-all text-xs shadow-none w-full"
+        />
+      </div>
 
-      <!-- 条目列表 -->
-      <ScrollArea class="flex-1 p-4 sm:p-6">
-        <div class="space-y-6">
+      <!-- 添加按钮 -->
+      <Button size="sm" class="h-9 px-4 shadow-sm shrink-0" @click="addEntry">
+        <Plus class="h-4 w-4 mr-2" />
+        添加
+      </Button>
+    </header>
+
+    <!-- 条目列表区域 (主内容) -->
+    <div class="flex-1 min-h-0 bg-muted/20 relative">
+      <ScrollArea class="h-full">
+        <div class="p-4 sm:p-6 space-y-6">
           <div
             v-for="entry in filteredEntries"
             :key="entry.id"
@@ -248,7 +221,6 @@ const duplicateEntry = (entry: LorebookEntry) => {
             ]"
           >
             <!-- 卡片头部: 元数据 -->
-            <!-- 使用 bg-muted/40 替代之前的 gradient -->
             <div
               class="flex flex-wrap items-center justify-between px-4 py-2 border-b border-border bg-muted/40 gap-2"
             >
@@ -372,7 +344,7 @@ const duplicateEntry = (entry: LorebookEntry) => {
             <div
               class="flex flex-col md:flex-row text-sm divide-y md:divide-y-0 md:divide-x divide-border"
             >
-              <!-- 左侧: 激活条件 (背景稍微深一点或带色调) -->
+              <!-- 左侧: 激活条件 -->
               <div
                 class="md:w-5/12 bg-muted/30 p-4 flex flex-col gap-3 relative"
               >
@@ -422,7 +394,7 @@ const duplicateEntry = (entry: LorebookEntry) => {
                 </div>
               </div>
 
-              <!-- 右侧: 内容效果 (背景保持卡片背景或更亮) -->
+              <!-- 右侧: 内容效果 -->
               <div
                 class="flex-1 bg-card p-4 flex flex-col gap-3 min-w-0 relative"
               >
@@ -499,7 +471,7 @@ const duplicateEntry = (entry: LorebookEntry) => {
           </div>
         </div>
       </ScrollArea>
-    </main>
+    </div>
   </div>
 </template>
 

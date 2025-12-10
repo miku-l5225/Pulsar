@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from "uuid";
 import { SchemaDefinition } from "../SemanticType";
 import { executeCode } from "@/lib/ExpressionEngine";
 import { MultiDepthInjection } from "../chat/EnhancedApiReadyContext";
-import { ApiReadyMessage, MessageAlternative } from "../chat/chat.types";
+import { ApiReadyMessage } from "../chat/chat.types";
 import { ExecuteContext } from "../shared.types";
 import { presetSchema } from "./preset.schema";
 import { Prompt, Preset } from "./preset.types.ts";

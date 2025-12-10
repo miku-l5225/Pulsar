@@ -1,3 +1,4 @@
+// src/schema/manifest/composables/useResources.ts
 import {
   computed,
   watch,
@@ -37,24 +38,30 @@ export function useResources(activeFilePath: MaybeRef<string | null>) {
   const pathRef = computed(() => unref(activeFilePath));
 
   // =========================================================================
-  // 1. Manifest 定位与读取
+  // 1. Manifest 定位与读取 (重构：使用 resolvePackageFolder)
   // =========================================================================
 
-  const manifestPath = computed(() => {
+  // 计算当前的包根目录 (Package Root Folder)
+  const packageRoot = computed(() => {
     const current = pathRef.value;
-    if (!current) return null;
+    if (!current || !store.isInitialized) return null;
 
-    // 逻辑：如果以 character 开头，截取前两个目录段，和 manifest.[manifest].json 拼合
-    // 例如: 'character/Alice/chat/New chat.[chat].json' -> 'character/Alice/manifest.[manifest].json'
-    if (current.startsWith("character/")) {
-      const parts = current.split("/");
-      if (parts.length >= 2) {
-        const rootPath = parts.slice(0, 2).join("/");
-        return `${rootPath}/manifest.[manifest].json`;
-      }
+    try {
+      // 利用 FS Store 的通用逻辑寻找包根路径
+      return store.resolvePackageFolder(current);
+    } catch (e) {
+      // 如果当前选中的文件不属于任何包（例如在根目录的散文件，或者是 global 下的文件），
+      // 这里会报错，我们在 UI 逻辑中通常视为 "未选中有效角色/包"，返回 null 即可
+      // console.debug(`[useResources] No package found for ${current}`);
+      return null;
     }
+  });
 
-    return null;
+  const localRootPath = computed(() => packageRoot.value?.path ?? null);
+
+  const manifestPath = computed(() => {
+    if (!localRootPath.value) return null;
+    return `${localRootPath.value}/manifest.[manifest].json`;
   });
 
   // 读取 Manifest 内容
@@ -65,14 +72,6 @@ export function useResources(activeFilePath: MaybeRef<string | null>) {
   // =========================================================================
 
   const globalRootPath = "global";
-
-  const localRootPath = computed(() => {
-    if (!manifestPath.value) return null;
-    // Manifest 通常位于 character/name/manifest.json
-    // 所以 localRoot 就是 manifest 所在的文件夹
-    const parts = manifestPath.value.split("/");
-    return parts.slice(0, -1).join("/");
-  });
 
   // =========================================================================
   // 3. 运行时逻辑：内容加载与构建 (Snapshot)

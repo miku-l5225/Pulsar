@@ -1,3 +1,4 @@
+<!-- src/components/layout/workbench/Workbench.vue -->
 <script setup lang="ts">
 import {
   useFileSystemStore,

@@ -12,10 +12,7 @@ import type {
   RegexRule,
 } from "@/schema/shared.types";
 import { EnhancedApiReadyContext } from "@/schema/chat/EnhancedApiReadyContext/EnhancedApiReadyContext";
-import type {
-  ApiReadyMessage,
-  MessageAlternative,
-} from "@/schema/chat/chat.types";
+import type { ApiReadyMessage } from "@/schema/chat/chat.types";
 
 // 定义处理状态接口
 export interface ProcessingState {
