@@ -8,6 +8,8 @@
     "build": "vue-tsc --noEmit && vite build",
     "tauri:dev": "bun run tauri dev",
     "tauri:build": "bun run tauri build --debug",
+    "tauri:build:android": "bun run tauri android build --target aarch64",
+    "tauri:build:all": "bun run tauri build --debug && bun run tauri android build --target aarch64",
     "tauri:build:noDebug": "bun run tauri build"
   },
   "dependencies": {

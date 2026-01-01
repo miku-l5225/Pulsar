@@ -48,7 +48,7 @@ const allNavButtons = computed(() => {
 
   // Store 中的功能
   const features = uiStore.bottomBarItems
-    .filter((item) => item.id !== "manifest-config") // 配置项在顶栏右侧，这里不显示
+    .filter((item) => item.id !== "manifest-config" && item.id !== "search") // 配置项在顶栏右侧，这里不显示
     .map((item) => ({
       svg: item.icon!,
       id: item.id,
@@ -79,7 +79,6 @@ const allNavButtons = computed(() => {
 
 // 桌面端 Top Buttons
 const topButtons = computed(() => {
-  // ... (保持原有的 desktop 逻辑) ...
   const baseButtons = [
     {
       svg: User,
@@ -170,7 +169,7 @@ const isNavActive = (id: string, action: string | Function) => {
           <!-- 移动端特有：将原本最左侧栏的功能作为顶部 Tab 栏嵌入 -->
           <template #mobile-nav v-if="mobile">
             <div
-              class="flex items-center gap-1 p-2 border-b border-border overflow-x-auto no-scrollbar shrink-0 bg-muted/30"
+              class="mobile-status-bar-padding flex items-center gap-1 p-2 border-b border-border overflow-x-auto no-scrollbar shrink-0 bg-muted/30"
             >
               <button
                 v-for="btn in allNavButtons"
@@ -202,13 +201,17 @@ const isNavActive = (id: string, action: string | Function) => {
         </SidePanelWrapper>
 
         <!-- 3. 工作台 -->
-        <Workbench class="flex-1 min-w-0" />
+        <Workbench class="flex-1 min-w-0 mobile-status-bar-padding" />
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
+.mobile-status-bar-padding {
+  padding-top: env(safe-area-inset-top);
+}
+
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }

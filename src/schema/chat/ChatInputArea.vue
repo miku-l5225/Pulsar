@@ -1,3 +1,4 @@
+<!-- src/schema/chat/ChatInputArea.vue -->
 <script setup lang="ts">
 import { ref, computed } from "vue";
 import { type role } from "../shared.types.ts";

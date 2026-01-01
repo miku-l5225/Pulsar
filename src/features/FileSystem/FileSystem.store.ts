@@ -1,6 +1,6 @@
 // src/features/FileSystem/FileSystem.store.ts
 import { defineStore } from "pinia";
-import { computed, ref, reactive, watch, Ref } from "vue";
+import { computed, ref, reactive, watch } from "vue";
 import {
   readDir,
   exists,
@@ -18,7 +18,6 @@ import {
   watch as fsWatch,
 } from "@/features/FileSystem/fs.api";
 import { invoke } from "@tauri-apps/api/core";
-// [新增] 引入 watch 和类型
 import {
   BaseDirectory,
   type FileInfo,
@@ -35,6 +34,18 @@ import {
   getNewTypedFile,
 } from "@/schema/SemanticType";
 import { useTaskStore } from "@/features/Task/Task.store";
+import { useMetadataStore } from "@/features/Metadata/Metadata.store";
+
+// 定义元数据结构接口（可选，为了类型提示）
+interface FileMetadata {
+  tags?: string[];
+  [key: string]: any; // 允许存储其他元数据
+}
+
+// 新增 Signal 类型
+// S代表共享，M代表混入，即共享+自动选择，T代表模板文件
+// 一个模板文件不应该是共享的。
+export type FileSignal = "S" | "M" | "T";
 
 export const TRASH_DIR_PATH = "trash";
 const TRASH_MANIFEST_PATH = urlJoin(TRASH_DIR_PATH, "manifest.json");
@@ -56,23 +67,29 @@ const isImageFile = (path: string) =>
   /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(path);
 const getUniqueName = (name: string, existingNames: Set<string>): string => {
   if (!existingNames.has(name)) return name;
+
   const parts = name.split(".");
   let ext = "";
-  let semantic = "";
   let base = name;
+
+  // 分离扩展名
   if (parts.length > 1) {
     ext = "." + parts.pop();
     base = parts.join(".");
   }
+
+  let semanticSuffix = "";
+  // 匹配 .[xxx] 结尾的模式
   const semanticMatch = base.match(/^(.+)(\.\[.*\])$/);
   if (semanticMatch) {
     base = semanticMatch[1];
-    semantic = semanticMatch[2];
+    semanticSuffix = semanticMatch[2]; // 这里包含了 .[character-S]
   }
+
   let counter = 2;
   let newName = "";
   do {
-    newName = `${base} (${counter})${semantic}${ext}`;
+    newName = `${base} (${counter})${semanticSuffix}${ext}`;
     counter++;
   } while (existingNames.has(newName));
   return newName;
@@ -99,10 +116,10 @@ async function runAsTask<T>(
 export abstract class VirtualNode {
   name: string;
   parent: VirtualFolder | null;
-  // [新增] 存储取消监听的函数
-  protected _unwatchFn: (() => void) | null = null;
+  // 存储取消监听的函数
+  _unwatchFn: (() => void) | null = null;
 
-  public isWatching: Ref<boolean> = ref(false);
+  public isWatching: boolean = false;
 
   constructor(name: string, parent: VirtualFolder | null) {
     this.name = name;
@@ -126,10 +143,75 @@ export abstract class VirtualNode {
     return await fsStat(this.path, { baseDir: BaseDirectory.AppData });
   }
 
-  // [新增] 抽象刷新方法，由子类实现具体逻辑
+  /**
+   * 获取当前节点的所有标签
+   */
+  async getTags(): Promise<string[]> {
+    const metaStore = useMetadataStore();
+    // 确保 Metadata Store 已初始化 (虽然通常 App 会在入口初始化，但这里做个防守)
+    if (!metaStore.isInitialized) await metaStore.init();
+
+    const metadata = await metaStore.read<FileMetadata>(this.path);
+    return metadata?.tags || [];
+  }
+
+  /**
+   * 为节点添加标签
+   */
+  async tag(tagName: string): Promise<void> {
+    if (!tagName) return;
+
+    const metaStore = useMetadataStore();
+    if (!metaStore.isInitialized) await metaStore.init();
+
+    // 1. 读取现有元数据
+    const currentMeta = (await metaStore.read<FileMetadata>(this.path)) || {};
+    const currentTags = currentMeta.tags || [];
+
+    // 2. 如果标签不存在，则添加
+    if (!currentTags.includes(tagName)) {
+      const newTags = [...currentTags, tagName];
+
+      // 3. 回写数据库 (保留其他元数据字段)
+      await metaStore.write(this.path, {
+        ...currentMeta,
+        tags: newTags,
+      });
+
+      console.log(`[FS] Tagged ${this.name} with "${tagName}"`);
+      // 可选：发射事件通知 UI 更新
+      // fsEmitter.emit('METADATA_UPDATED', { path: this.path });
+    }
+  }
+
+  /**
+   * 移除节点的某个标签
+   */
+  async unTag(tagName: string): Promise<void> {
+    const metaStore = useMetadataStore();
+    if (!metaStore.isInitialized) await metaStore.init();
+
+    const currentMeta = (await metaStore.read<FileMetadata>(this.path)) || {};
+    const currentTags = currentMeta.tags || [];
+
+    // 1. 过滤掉目标标签
+    if (currentTags.includes(tagName)) {
+      const newTags = currentTags.filter((t) => t !== tagName);
+
+      // 2. 回写数据库
+      await metaStore.write(this.path, {
+        ...currentMeta,
+        tags: newTags,
+      });
+
+      console.log(`[FS] UnTagged ${this.name} of "${tagName}"`);
+    }
+  }
+
+  // 抽象刷新方法，由子类实现具体逻辑
   abstract refresh(): Promise<void>;
 
-  // [新增] 监听方法
+  // 监听方法
   async watch(
     options: { recursive?: boolean } = { recursive: true }
   ): Promise<void> {
@@ -203,7 +285,7 @@ export abstract class VirtualNode {
           delayMs: 300, // 防抖，避免短时间多次触发
         }
       );
-      this.isWatching.value = true;
+      this.isWatching = true;
     } catch (error) {
       console.error(`[FS] Failed to watch ${this.path}:`, error);
     }
@@ -216,7 +298,7 @@ export abstract class VirtualNode {
       this._unwatchFn = null;
       console.log(`[FS] Stopped watching ${this.path}`);
     }
-    this.isWatching.value = false;
+    this.isWatching = false;
   }
 
   abstract unload(): void;
@@ -340,9 +422,64 @@ export abstract class VirtualNode {
 }
 
 export class VirtualFile extends VirtualNode {
+  /**
+   * 解析文件名中的元数据
+   * 格式支持：
+   * - name.[type].ext
+   * - name.[type-Signal].ext
+   * - name.[Signal].ext
+   */
+  private get _parsedMetadata() {
+    // 匹配 .[content].ext 或 .[content] 结尾
+    const match = this.name.match(/\.\[(.*?)\](\.[^.]*)?$/);
+
+    if (!match) {
+      return { type: "unknown", signal: null, rawContent: null };
+    }
+
+    const content = match[1]; // 括号内的内容
+
+    // 1. 检查是否以 -S, -M, -T 结尾 (例如 "character-S", "preset-T")
+    // 修改：正则加入 T
+    const signalMatch = content.match(/^(.*)-(S|M|T)$/);
+
+    if (signalMatch) {
+      return {
+        type: signalMatch[1] || "unknown",
+        signal: signalMatch[2] as FileSignal,
+        rawContent: content,
+      };
+    }
+
+    // 2. 检查内容是否直接就是 S, M, T (例如 .[S].png, .[T].json)
+    // 修改：加入 T 的判断
+    if (["S", "M", "T"].includes(content)) {
+      return {
+        type: "unknown",
+        signal: content as FileSignal,
+        rawContent: content,
+      };
+    }
+
+    // 3. 无 Signal 情况 (例如 "character")
+    return {
+      type: content,
+      signal: null,
+      rawContent: content,
+    };
+  }
+
   get semanticType(): SemanticType | "unknown" {
-    const match = this.name.match(/\.\[(.*?)]\./);
-    return (match ? match[1] : "unknown") as SemanticType | "unknown";
+    return (this._parsedMetadata.type as SemanticType) || "unknown";
+  }
+
+  get signal(): FileSignal | null {
+    return this._parsedMetadata.signal;
+  }
+
+  // 新增：便捷判断是否为模板
+  get isTemplate(): boolean {
+    return this.signal === "T";
   }
 
   get extension(): string {
@@ -350,7 +487,91 @@ export class VirtualFile extends VirtualNode {
     return idx !== -1 ? this.name.substring(idx) : "";
   }
 
-  // [新增] 实现文件局部刷新：对比内容，仅在变动时更新缓存
+  /**
+   * 设置文件的 Signal (S, M, T)
+   * 会触发文件重命名
+   */
+  async setSignal(signal: FileSignal): Promise<void> {
+    if (this.signal === signal) return;
+
+    const { type, rawContent } = this._parsedMetadata;
+    const oldName = this.name;
+    let newName = oldName;
+
+    if (rawContent) {
+      // 已经存在方括号 .[xxx]
+      let newContent = "";
+      // 如果有明确类型且类型不是 'unknown'，保留类型：type-Signal
+      // 否则直接变为 Signal
+      if (type && type !== "unknown") {
+        newContent = `${type}-${signal}`;
+      } else {
+        newContent = signal;
+      }
+
+      const lastBracketOpen = oldName.lastIndexOf(".[");
+      const lastBracketClose = oldName.lastIndexOf("]");
+      if (lastBracketOpen !== -1 && lastBracketClose > lastBracketOpen) {
+        const prefix = oldName.substring(0, lastBracketOpen);
+        const suffix = oldName.substring(lastBracketClose + 1);
+        newName = `${prefix}.[${newContent}]${suffix}`;
+      }
+    } else {
+      // 原本没有方括号，插入
+      const extIndex = oldName.lastIndexOf(".");
+      if (extIndex !== -1) {
+        const prefix = oldName.substring(0, extIndex);
+        const ext = oldName.substring(extIndex);
+        newName = `${prefix}.[${signal}]${ext}`;
+      } else {
+        newName = `${oldName}.[${signal}]`;
+      }
+    }
+
+    if (newName !== oldName) {
+      console.log(`[FS] Setting signal ${signal}: ${oldName} -> ${newName}`);
+      await this.rename(newName);
+    }
+  }
+
+  /**
+   * 移除文件的 Signal
+   * 会触发文件重命名
+   */
+  async removeSignal(): Promise<void> {
+    if (!this.signal) return; // 没有 Signal，无需操作
+
+    const { type, rawContent } = this._parsedMetadata;
+    const oldName = this.name;
+    let newName = oldName;
+
+    // 定位方括号部分
+    const lastBracketOpen = oldName.lastIndexOf(".[");
+    const lastBracketClose = oldName.lastIndexOf("]");
+
+    if (lastBracketOpen === -1 || lastBracketClose <= lastBracketOpen) return;
+
+    const prefix = oldName.substring(0, lastBracketOpen);
+    const suffix = oldName.substring(lastBracketClose + 1);
+
+    if (type && type !== "unknown") {
+      // 还原为纯类型： .[character-S] -> .[character]
+      newName = `${prefix}.[${type}]${suffix}`;
+    } else {
+      // 如果没有类型（即原本是 .[S]），移除 Signal 后方括号也移除
+      // .[S].png -> .png
+      // 注意：如果 prefix 为空（文件名以 .[S] 开头），这可能导致文件名以 . 开头（隐藏文件）
+      // 业务逻辑通常是 image.[S].png -> image.png
+      newName = `${prefix}${suffix}`;
+    }
+
+    if (newName !== oldName) {
+      console.log(`[FS] Removing signal: ${oldName} -> ${newName}`);
+      await this.rename(newName);
+    }
+  }
+
+  // 实现文件局部刷新：对比内容，仅在变动时更新缓存
   async refresh(): Promise<void> {
     const store = useFileSystemStore();
     try {
@@ -494,6 +715,11 @@ export class VirtualFile extends VirtualNode {
       }
 
       fsEmitter.emit(FSEventType.FILE_CREATED, { path: destPath });
+
+      fsEmitter.emit(FSEventType.FILE_COPIED, {
+        from: this.path,
+        to: destPath,
+      });
     });
   }
 
@@ -577,7 +803,7 @@ export class VirtualFolder extends VirtualNode {
     super(name, parent);
   }
 
-  // [新增] 文件夹局部刷新：同步子目录结构
+  // 文件夹局部刷新：同步子目录结构
   async refresh(): Promise<void> {
     try {
       const entries = await readDir(this.path, {
@@ -1117,7 +1343,7 @@ export const useFileSystemStore = defineStore("newFileSystem", () => {
       node instanceof VirtualFolder ? node : node.parent;
 
     while (currentFolder) {
-      if (currentFolder.children.has("manifest.[manifest].json")) {
+      if (currentFolder.children.has("manifest.json")) {
         return currentFolder;
       }
       if (!currentFolder.parent) break;

@@ -1,3 +1,4 @@
+<!-- src/schema/chat/ChatBubble.vue -->
 <script lang="ts">
 import { type InjectionKey, type Ref, inject } from "vue";
 import type { FlatChatMessage } from "./chat.types";

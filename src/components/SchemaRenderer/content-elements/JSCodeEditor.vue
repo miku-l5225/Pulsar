@@ -2,13 +2,7 @@
 <script setup lang="ts">
 import { defineAsyncComponent, shallowRef } from "vue";
 import type { editor } from "monaco-editor";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 
 // 配合 loadingComponent 可以在加载时显示占位符
 const MonacoEditor = defineAsyncComponent({
@@ -21,7 +15,7 @@ const MonacoEditor = defineAsyncComponent({
 });
 
 const model = defineModel<string>({ required: true });
-const props = defineProps({
+defineProps({
   title: { type: String, default: "JavaScript 代码编辑器" },
   description: { type: String, default: "在这里编写和编辑您的代码。" },
 });
@@ -54,10 +48,6 @@ const handleEditorDidMount = async (
 
 <template>
   <Card class="w-full flex flex-col h-full">
-    <CardHeader>
-      <CardTitle>{{ props.title }}</CardTitle>
-      <CardDescription>{{ props.description }}</CardDescription>
-    </CardHeader>
     <!-- grow 确保内容区域填满 Card 的剩余空间 -->
     <CardContent class="grow p-0 overflow-hidden relative min-h-[400px]">
       <!-- 添加 absolute inset-0 确保 monaco 能够撑满 CardContent -->

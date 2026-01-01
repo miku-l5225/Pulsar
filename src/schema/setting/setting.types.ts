@@ -1,4 +1,3 @@
-// src/schema/setting/setting.types.ts
 import type { ChatMessageItem, messageId } from "../chat/chat.types";
 import type { RegexRule } from "../shared.types";
 import type { LorebookSetting } from "../lorebook/lorebook.types";
@@ -60,6 +59,21 @@ export interface DefaultModelSetting {
   image?: string | null;
 }
 
+// 移动过来的背景模式定义
+export type BackgroundMode =
+  | "cover"
+  | "contain"
+  | "tile"
+  | "center"
+  | "stretch";
+
+/**
+ * 全局背景设置
+ */
+export interface GlobalBackgroundSetting {
+  mode: BackgroundMode;
+}
+
 /**
  * 全局设置的核心数据结构。
  */
@@ -72,5 +86,6 @@ export type Setting = {
   tools: string[];
   backup: BackupSettings;
   extensions: Record<string, ExtensionConfig>;
-  defaultModels: DefaultModelSetting; // 新增字段
+  defaultModels: DefaultModelSetting;
+  background: GlobalBackgroundSetting; // 新增字段
 };

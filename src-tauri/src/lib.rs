@@ -1,6 +1,7 @@
 // src-tauri/src/lib.rs
 
 mod backup;
+mod search;
 mod secrets_manager;
 mod script_manager;
 mod remote_service;
@@ -9,7 +10,9 @@ mod proxy_server;
 mod error;
 
 use std::collections::HashMap; // 引入 HashMap
+#[allow(unused_imports)]
 use std::sync::Arc;
+#[allow(unused_imports)]
 use remote_service::{RemoteServiceState, init_remote_service};
 use tauri::{Manager, RunEvent, WindowEvent}; // 引入 RunEvent
 use tokio::sync::Mutex; // 确保 Mutex 被引入
@@ -55,7 +58,6 @@ fn cleanup_child_processes(handle: &tauri::AppHandle) {
 pub fn run() {
     // 将 Builder 的结果赋值给一个变量 `app`
     let app = tauri::Builder::default()
-        .plugin(tauri_plugin_autostart::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_sql::Builder::new().build())
         .plugin(tauri_plugin_shell::init())
@@ -88,14 +90,19 @@ pub fn run() {
             secrets_manager::delete_secret_key,
             proxy_server::get_proxy_port,
             remote_service::open_remote_window,
-            remote_service::send_to_remote_window
+            remote_service::send_to_remote_window,
+            search::search_in_files
         ])
         .setup(|app| {
+                #[cfg(desktop)]
+          {
                 let remote_state = Arc::new(RemoteServiceState::new());
                 app.manage(remote_state.clone());
-                #[cfg(desktop)]
                 init_remote_service(app.handle().clone(), remote_state);
 
+          }
+
+                #[cfg(desktop)]
                 {
                   app.handle().plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec!["--flag1", "--flag2"])))?;
                   app.handle().plugin(tauri_plugin_positioner::init())?;
@@ -106,11 +113,11 @@ pub fn run() {
                       .build(app)?;
                 }
                 // --- 启动代理服务器 ---
-                         let port = proxy_server::start_proxy_server(app.handle().clone());
-                         // 将端口号保存到 State 中
-                         let port_state = app.state::<proxy_server::ProxyPort>();
-                         *port_state.0.lock().unwrap() = port;
-                         println!("Proxy server initialized on port: {}", port);
+                let port = proxy_server::start_proxy_server(app.handle().clone());
+                // 将端口号保存到 State 中
+                let port_state = app.state::<proxy_server::ProxyPort>();
+                *port_state.0.lock().unwrap() = port;
+                println!("Proxy server initialized on port: {}", port);
 
               Ok(())
             })

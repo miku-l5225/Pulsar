@@ -193,7 +193,6 @@ pub async fn open_remote_window(
 
     // 4. 创建窗口
     let win_builder = tauri::WebviewWindowBuilder::new(&app, label.clone(), tauri::WebviewUrl::External(url.parse().map_err(|e: url::ParseError| e.to_string())?))
-        .title("Remote Service")
         .initialization_script(&bootstrap_script);
 
     match win_builder.build() {

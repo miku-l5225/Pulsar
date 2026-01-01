@@ -6,9 +6,21 @@ export type UniqueId = string;
 export type messageId = UniqueId;
 
 // ========== 变量 ==========
+
+/**
+ * 变量变更应当是一段可执行的代码片段。
+ * 代码应包含一个 `async main(oldValue)` 函数。
+ */
 export interface VariableChange {
-  accessChain: string[];
-  updateMethod: ((oldValue: any) => any) | any;
+  /**
+   * 包含 `async main(oldValue)` 函数定义的代码字符串。
+   * @example
+   * "async main(data) {
+   *    data.gold += 100;
+   *    return data;
+   *  }"
+   */
+  code: string;
 }
 
 // ========== 区间 ==========
@@ -167,7 +179,23 @@ export interface ChatMessageItem {
 export interface RootChat {
   name: string;
   messages: ChatMessageItem[];
+  /**
+   * 初始的贫血对象 (JSON Data)
+   */
   userValue: Record<string, any>;
+
+  /**
+   * 包装器代码。
+   * 用于将 userValue 转换为拥有方法的富对象。
+   * 格式同 VariableChange，包含 async main(raw) { ... return wrapped }
+   */
+  valueWrapper?: string;
+
+  /**
+   * 变量文档/说明。
+   * 这将被加入到上下文中，指导模型如何编写 VariableChange 的代码。
+   */
+  document?: string;
   tools: string[];
   create_date: string;
   modification_date: string;
@@ -190,6 +218,10 @@ export type ApiReadyContext = {
   activeMessages: ApiReadyMessage[];
   resolvedUserValue: Record<string, any>;
   resolvedIntervals: ResolvedInterval[];
+  /**
+   * 随上下文携带的变量文档
+   */
+  variableDocument?: string;
 };
 
 export type ResolvedInterval = {

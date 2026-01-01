@@ -7,10 +7,10 @@ import { PresetDefinition } from "./preset/preset";
 import { StatisticDefinition } from "./statistic/statistic";
 import { SettingDefinition } from "./setting/setting";
 import { ModelConfigDefinition } from "./modelConfig/modelConfig";
-import { ManifestDefinition } from "./manifest/manifest";
 import { UnknownDefinition } from "./unknown/unknown";
 
 import { Schema } from "@/components/SchemaRenderer/SchemaRenderer.types";
+import { newManifest } from "@/components/EnvironmentSidebar/manifest";
 
 // --- 接口定义 ---
 // 更新接口以包含 createStructure 和 resolve
@@ -33,7 +33,6 @@ export type SemanticType =
   | "character"
   | "lorebook"
   | "preset"
-  | "manifest"
   | "unknown";
 
 export type SchemaDefinition<Type> = {
@@ -52,7 +51,6 @@ export type SemanticTypeMap = {
   statistic: typeof StatisticDefinition;
   setting: typeof SettingDefinition;
   modelConfig: typeof ModelConfigDefinition;
-  manifest: typeof ManifestDefinition;
   unknown: typeof UnknownDefinition;
 };
 
@@ -64,7 +62,6 @@ export const SemanticTypeMap: SemanticTypeMap = {
   statistic: StatisticDefinition,
   setting: SettingDefinition,
   modelConfig: ModelConfigDefinition,
-  manifest: ManifestDefinition,
   unknown: UnknownDefinition,
 };
 
@@ -89,10 +86,7 @@ export async function createCharacterEnvironment(
   // 使用新的 createStructure 方法定义角色结构
   const structure = {
     [charName]: {
-      chat: {}, // 空文件夹
-      template: {
-        ["chat.[chat].json"]: () => getNewTypedFile("chat"),
-      },
+      chat: {},
       lorebook: {},
       preset: {},
       background: {},
@@ -105,8 +99,8 @@ export async function createCharacterEnvironment(
         },
       },
       // Manifest 文件
-      "manifest.[manifest].json": () => {
-        return getNewTypedFile("manifest");
+      "manifest.json": () => {
+        return newManifest();
       },
     },
   };

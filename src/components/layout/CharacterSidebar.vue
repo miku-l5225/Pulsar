@@ -115,22 +115,18 @@ const handleCardClick = async (char: CharacterItem) => {
     }
   }
 
-  // 如果没有，创建默认环境 (简化版逻辑，如有需要可完整复制原有逻辑)
+  // TODO: 创建？
   if (!targetFile) {
     // ... 此处保留原 CharacterLibrary.vue 中的创建逻辑 ...
     // 为节省篇幅，假设一定会打开 Manifest 或 Chat
-    targetFile = urlJoin(char.path, "manifest.[manifest].json");
+    targetFile = urlJoin(char.path, "manifest.json");
   }
 
   if (targetFile) uiStore.openFile(targetFile);
 };
 
 const handleEditClick = (e: Event, char: CharacterItem) => {
-  e.stopPropagation();
-  // 打开 Manifest 并呼出右侧栏
-  const manifestPath = urlJoin(char.path, "manifest.[manifest].json");
-  uiStore.setActiveFile(manifestPath);
-  uiStore.toggleRightSidebar("manifest-config");
+  console.log("edit click");
 };
 </script>
 

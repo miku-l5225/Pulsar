@@ -1,4 +1,3 @@
-// src/schema/setting/setting.schema.ts
 import {
   Library,
   ReplaceAll,
@@ -6,6 +5,7 @@ import {
   History,
   ScanLine,
   Bot,
+  Image as ImageIcon, // 引入图标
 } from "lucide-vue-next";
 import type { Schema } from "@/components/SchemaRenderer/SchemaRenderer.types";
 import ExecutableStringEditor from "../lorebook/components/ExecutableStringEditor.vue";
@@ -30,7 +30,6 @@ export function getSettingSchema(): Schema {
         title: "默认模型",
         content: {
           title: "AI 模型首选项",
-
           content: [
             {
               content: [
@@ -39,6 +38,36 @@ export function getSettingSchema(): Schema {
                   description: "配置默认对话和嵌入模型。",
                   component: "DefaultModelSelector",
                   accessChain: "defaultModels",
+                },
+              ],
+            },
+          ],
+        },
+      },
+      // --- 新增分组: 外观设置 ---
+      {
+        svg: ImageIcon,
+        title: "外观设置",
+        content: {
+          title: "外观与显示",
+          content: [
+            {
+              title: "背景设置",
+              content: [
+                {
+                  title: "背景显示模式",
+                  description: "设置背景图片的填充和对齐方式。",
+                  component: "Select",
+                  accessChain: "background.mode",
+                  props: {
+                    options: [
+                      { label: "覆盖 (Cover)", value: "cover" },
+                      { label: "包含 (Contain)", value: "contain" },
+                      { label: "平铺 (Tile)", value: "tile" },
+                      { label: "居中 (Center)", value: "center" },
+                      { label: "拉伸 (Stretch)", value: "stretch" },
+                    ],
+                  },
                 },
               ],
             },
@@ -142,7 +171,7 @@ export function getSettingSchema(): Schema {
                 {
                   title: "分块大小 (Chunk Size)",
                   description: "向量化时文本切片的最大字符数。",
-                  component: "Slider", // 或 InputNumber
+                  component: "Slider",
                   accessChain: "vectorization.chunkSize",
                   props: { min: 64, max: 2048, step: 64 },
                 },
@@ -155,7 +184,6 @@ export function getSettingSchema(): Schema {
                   props: {
                     dialogTitle: "编辑分块分隔符",
                     placeholder: "\\n\\n\n\\n\n。",
-                    // 注意：实际实现中PopableTextarea通常处理字符串数组为换行分隔的字符串
                   },
                 },
               ],

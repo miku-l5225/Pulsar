@@ -148,7 +148,6 @@
     "core:window:allow-toggle-maximize",
     "core:window:allow-unmaximize",
     "core:window:allow-unminimize",
-    "autostart:default",
     "clipboard-manager:allow-clear",
     "clipboard-manager:allow-read-image",
     "clipboard-manager:allow-read-text",
@@ -192,7 +191,7 @@
     },
     "opener:default",
     "os:default",
-    "positioner:default",
+
     "process:default",
     "shell:default",
     "shell:allow-open",

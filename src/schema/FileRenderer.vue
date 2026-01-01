@@ -17,11 +17,10 @@ import { useFileContent } from "@/features/FileSystem/composables/useFileContent
 import { useVueComponent } from "@/features/FileSystem/composables/useVueComponent";
 import { SemanticTypeMap, type SemanticType } from "@/schema/SemanticType";
 import type { Schema } from "@/components/SchemaRenderer/SchemaRenderer.types";
-import type { ManifestContent } from "@/schema/manifest/manifest.types";
+import type { ManifestContent } from "@/components/EnvironmentSidebar/manifest.types.ts";
 
 import SchemaRenderer from "@/components/SchemaRenderer/SchemaRenderer.vue";
 import UnknownFileRenderer from "./unknown/UnknownFileRenderer.vue";
-import CharacterLibrary from "./CharacterLibrary.vue";
 import { useUIStore } from "@/features/UI/UI.store";
 
 const Tester = defineAsyncComponent(() => import("./Tester.vue"));
@@ -36,9 +35,6 @@ const uiStore = useUIStore();
 
 // 注册默认组件 (可选)
 onMounted(() => {
-  if (!uiStore.customComponents["$character"]) {
-    uiStore.registerComponent("$character", CharacterLibrary);
-  }
   if (!uiStore.customComponents["$test"]) {
     uiStore.registerComponent("$test", Tester);
   }
@@ -99,7 +95,7 @@ const contextManifestPaths = computed(() => {
 
   const paths: { self: string | null; global: string } = {
     self: null,
-    global: "global/manifest.[manifest].json",
+    global: "global/manifest.json",
   };
 
   let currentPath = props.path.split("/").slice(0, -1).join("/");
@@ -107,10 +103,7 @@ const contextManifestPaths = computed(() => {
     const node = fsStore.resolvePath(currentPath);
     if (node instanceof VirtualFolder) {
       for (const [name, child] of node.children) {
-        if (
-          (name.endsWith(".[manifest].json") || name === "manifest.json") &&
-          child instanceof VirtualFile
-        ) {
+        if (name === "manifest.json" && child instanceof VirtualFile) {
           paths.self = child.path;
           break;
         }

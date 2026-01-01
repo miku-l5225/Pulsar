@@ -1,4 +1,3 @@
-// src/schema/setting/setting.ts
 import type { SchemaDefinition } from "@/schema/SemanticType";
 import { getSettingSchema } from "./setting.schema";
 import { Setting } from "./setting.types";
@@ -37,8 +36,13 @@ export function newSetting(): Setting {
       embedding: null,
       image: null,
     },
+    // 新增背景设置默认值
+    background: {
+      mode: "cover",
+    },
   };
 }
+
 /**
  * SettingWrapper 用于在模板中访问全局设置。
  */
@@ -72,14 +76,19 @@ class SettingWrapper {
       };
     }
 
+    // 确保 background 存在
+    if (!this.resource.content.background) {
+      this.resource.content.background = {
+        mode: "cover",
+      };
+    }
+
     // 将 setting.json 的内容复制到 Wrapper 实例的顶层
     Object.assign(this, this.resource.content);
   }
 
   /**
    * 获取用户配置的默认对话模型 ID。
-   * 注意：此方法只返回配置值，不校验模型是否有效或可用。
-   * 如果未设置，返回 null。
    */
   public getDefaultChatModel(): string | null {
     return this.resource.content.defaultModels?.chat ?? null;
@@ -113,7 +122,6 @@ export const SettingDefinition = {
     const setting = new SettingWrapper(resources);
     return {
       SETTING: setting,
-      // 可以在此处暴露顶层变量，方便模板直接使用 {{ defaultChatModel }}
       defaultChatModel: setting.getDefaultChatModel(),
       defaultEmbeddingModel: setting.getDefaultEmbeddingModel(),
     };

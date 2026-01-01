@@ -1,4 +1,3 @@
-// src/schema/chat/useFlattenedChat.ts
 import { computed, toValue, type MaybeRef, reactive } from "vue";
 import {
   type RootChat,
@@ -6,6 +5,7 @@ import {
   type Alternative,
   type MetaGenerateInfo,
   type ApiReadyContext,
+  type FlatChatMessage, // 导入此类型
 } from "./chat.types";
 import { role } from "../shared.types";
 import { cloneDeep, merge } from "lodash-es";
@@ -27,7 +27,6 @@ import {
 } from "./chat";
 
 export function useFlattenedChat(chatRef: MaybeRef<RootChat | null>) {
-  console.log("chatRef", chatRef);
   // 1. 核心计算属性：压平聊天记录
   const flattenedChat = computed<FlattenedChat>(() => {
     const root = toValue(chatRef);
@@ -50,11 +49,12 @@ export function useFlattenedChat(chatRef: MaybeRef<RootChat | null>) {
     };
   });
 
-  // 2. 辅助方法：通过索引获取容器
-  function getContainerByIndex(index: number) {
-    const path = flattenedChat.value.messages[index]?.path;
+  // 2. 辅助方法：通过实例获取容器
+  // 直接利用 FlatChatMessage 中携带的 path 信息回溯原始对象
+  function resolvePathTarget(item: FlatChatMessage) {
+    const path = item.path;
     if (!path) {
-      console.error(`Invalid flat index: ${index}`);
+      console.error(`Item has no path:`, item);
       return null;
     }
     const root = toValue(chatRef);
@@ -63,10 +63,18 @@ export function useFlattenedChat(chatRef: MaybeRef<RootChat | null>) {
     return findContainerByPath(root, path);
   }
 
+  // 辅助方法：获取实例在当前扁平化数组中的索引（主要用于上下文生成的截断）
+  function getIndexOfItem(item: FlatChatMessage): number {
+    return flattenedChat.value.messages.indexOf(item);
+  }
+
   // ========== 修改操作 (Setters) ==========
 
-  const switchAlternative = (index: number, alternativeIndex: number) => {
-    const result = getContainerByIndex(index);
+  const switchAlternative = (
+    item: FlatChatMessage,
+    alternativeIndex: number
+  ) => {
+    const result = resolvePathTarget(item);
     if (result?.container) {
       const { container } = result;
       if (
@@ -78,15 +86,15 @@ export function useFlattenedChat(chatRef: MaybeRef<RootChat | null>) {
     }
   };
 
-  const setRole = (index: number, role: role) => {
-    const result = getContainerByIndex(index);
+  const setRole = (item: FlatChatMessage, role: role) => {
+    const result = resolvePathTarget(item);
     if (result?.container) {
       result.container.role = role;
     }
   };
 
-  const renameAlternative = (index: number, name: string) => {
-    const result = getContainerByIndex(index);
+  const renameAlternative = (item: FlatChatMessage, name: string) => {
+    const result = resolvePathTarget(item);
     if (result?.container) {
       const activeIndex = result.container.activeAlternative;
       if (activeIndex >= 0) {
@@ -95,8 +103,8 @@ export function useFlattenedChat(chatRef: MaybeRef<RootChat | null>) {
     }
   };
 
-  const setMessageContent = (index: number, content: string) => {
-    const result = getContainerByIndex(index);
+  const setMessageContent = (item: FlatChatMessage, content: string) => {
+    const result = resolvePathTarget(item);
     if (result?.container) {
       const activeIndex = result.container.activeAlternative;
       const activeAlt = result.container.alternatives[activeIndex];
@@ -107,11 +115,11 @@ export function useFlattenedChat(chatRef: MaybeRef<RootChat | null>) {
   };
 
   const setMessageMeta = (
-    index: number,
+    item: FlatChatMessage,
     key: keyof MetaGenerateInfo,
     value: any
   ) => {
-    const result = getContainerByIndex(index);
+    const result = resolvePathTarget(item);
     if (result?.container) {
       const activeIndex = result.container.activeAlternative;
       const activeAlt = result.container.alternatives[activeIndex];
@@ -124,11 +132,11 @@ export function useFlattenedChat(chatRef: MaybeRef<RootChat | null>) {
   // ========== 结构操作 (Add/Delete) ==========
 
   const _pushAlternativeToContainer = (
-    index: number,
+    item: FlatChatMessage,
     alternative: Alternative,
     activate: boolean
   ) => {
-    const result = getContainerByIndex(index);
+    const result = resolvePathTarget(item);
     if (result?.container) {
       result.container.alternatives.push(alternative);
       if (activate) {
@@ -138,34 +146,37 @@ export function useFlattenedChat(chatRef: MaybeRef<RootChat | null>) {
     }
   };
 
-  // 使用工厂函数替代原来的重复逻辑
-  const addBlankMessage = (index: number, activate = true) => {
+  const addBlankMessage = (item: FlatChatMessage, activate = true) => {
     const alt = createMessageAlternative("");
-    _pushAlternativeToContainer(index, alt, activate);
+    _pushAlternativeToContainer(item, alt, activate);
   };
 
   const addNewMessage = (
-    index: number,
+    item: FlatChatMessage,
     content: string,
     config?: Partial<MetaGenerateInfo>,
     activate = true
   ) => {
     const alt = createMessageAlternative(content, config);
-    _pushAlternativeToContainer(index, alt, activate);
+    _pushAlternativeToContainer(item, alt, activate);
   };
 
-  const addBlankBranch = (index: number, activate = true) => {
+  const addBlankBranch = (item: FlatChatMessage, activate = true) => {
     const alt = createBranchAlternative("");
-    _pushAlternativeToContainer(index, alt, activate);
+    _pushAlternativeToContainer(item, alt, activate);
   };
 
-  const addNewBranch = (index: number, content: string, activate = true) => {
+  const addNewBranch = (
+    item: FlatChatMessage,
+    content: string,
+    activate = true
+  ) => {
     const alt = createBranchAlternative(content);
-    _pushAlternativeToContainer(index, alt, activate);
+    _pushAlternativeToContainer(item, alt, activate);
   };
 
-  const fork = (index: number) => {
-    const result = getContainerByIndex(index);
+  const fork = (item: FlatChatMessage) => {
+    const result = resolvePathTarget(item);
     if (result?.container) {
       const activeIndex = result.container.activeAlternative;
       if (activeIndex >= 0) {
@@ -173,7 +184,7 @@ export function useFlattenedChat(chatRef: MaybeRef<RootChat | null>) {
           result.container.alternatives[activeIndex]
         );
         newAlternative.id = nanoid(); // 确保 ID 唯一
-        _pushAlternativeToContainer(index, newAlternative, true);
+        _pushAlternativeToContainer(item, newAlternative, true);
       }
     }
   };
@@ -181,11 +192,15 @@ export function useFlattenedChat(chatRef: MaybeRef<RootChat | null>) {
   /**
    * 在指定消息的父容器层级中，向后插入一条新消息
    */
-  const appendMessage = (index: number, config?: Partial<MetaGenerateInfo>) => {
-    const result = getContainerByIndex(index);
+  const appendMessage = (
+    item: FlatChatMessage,
+    config?: Partial<MetaGenerateInfo>
+  ) => {
+    const result = resolvePathTarget(item);
     if (result) {
       const { parentArray } = result;
-      const currentPath = flattenedChat.value.messages[index].path;
+      // 从 item.path 中获取当前容器在父数组中的位置
+      const currentPath = item.path;
       const insertionIndex =
         currentPath[currentPath.length - 1].containerIndex + 1;
 
@@ -202,7 +217,7 @@ export function useFlattenedChat(chatRef: MaybeRef<RootChat | null>) {
   };
 
   /**
-   * 在当前激活分支的末尾追加新消息
+   * 在当前激活分支的末尾追加新消息 (保持不变，因为它不依赖特定节点)
    */
   const appendMessageToLeaf = (
     content: string,
@@ -231,8 +246,8 @@ export function useFlattenedChat(chatRef: MaybeRef<RootChat | null>) {
     leafContainer.messages.push(newContainer);
   };
 
-  const deleteAlternative = (index: number) => {
-    const result = getContainerByIndex(index);
+  const deleteAlternative = (item: FlatChatMessage) => {
+    const result = resolvePathTarget(item);
     if (result?.container) {
       const container = result.container;
       const activeIndex = container.activeAlternative;
@@ -248,9 +263,9 @@ export function useFlattenedChat(chatRef: MaybeRef<RootChat | null>) {
     }
   };
 
-  const deleteContainer = (index: number) => {
-    const result = getContainerByIndex(index);
-    const path = flattenedChat.value.messages[index]?.path;
+  const deleteContainer = (item: FlatChatMessage) => {
+    const result = resolvePathTarget(item);
+    const path = item.path;
     if (result && path && path.length > 0) {
       const containerIndex = path[path.length - 1].containerIndex;
       result.parentArray.splice(containerIndex, 1);
@@ -258,12 +273,11 @@ export function useFlattenedChat(chatRef: MaybeRef<RootChat | null>) {
   };
 
   // ========== 生成逻辑 (Generate) ==========
-  const generate = (index?: number) => {
+  const generate = async (item?: FlatChatMessage) => {
     // 1. 获取当前的 Root，用于初始检查
     const root = toValue(chatRef);
 
     if (!root) {
-      // 错误处理... (保持原样)
       return {
         CHAT: new EnhancedApiReadyContext({
           activeMessages: [],
@@ -292,16 +306,16 @@ export function useFlattenedChat(chatRef: MaybeRef<RootChat | null>) {
     let removeCleanup: () => void;
 
     // --- 情况 A: 重生成 (指定位置) ---
-    if (index !== undefined) {
+    if (item) {
       // 1. 获取路径信息 (这是静态的坐标，不会变)
       // 我们需要保留 path 副本，不要保留引用
-      const originalPath = cloneDeep(flattenedChat.value.messages[index]?.path);
+      const originalPath = cloneDeep(item.path);
 
-      if (!originalPath) throw new Error(`Invalid generate index: ${index}`);
+      if (!originalPath) throw new Error(`Invalid generate item path`);
 
       // 2. 初始插入 (还是需要找到一次容器来 push)
       // 这里使用工具函数找到容器
-      const lookup = findContainerByPath(root, originalPath);
+      const lookup = resolvePathTarget(item);
       if (!lookup) throw new Error("Container not found for insertion");
 
       const { container: parentContainer } = lookup;
@@ -313,7 +327,9 @@ export function useFlattenedChat(chatRef: MaybeRef<RootChat | null>) {
         parentContainer.alternatives.length - 1;
 
       // 4. 生成上下文
-      const contextResult = createChatContext(root, index - 1);
+      // 需要找到 item 在列表中的 index 以传递给 legacy 的 createChatContext
+      const index = getIndexOfItem(item);
+      const contextResult = await createChatContext(root, index - 1);
 
       // 5. 【核心】：构建实时寻址函数
       getLatestContainer = () => {
@@ -370,6 +386,7 @@ export function useFlattenedChat(chatRef: MaybeRef<RootChat | null>) {
     }
 
     // --- 情况 B: 新生成 (追加到底部) ---
+    // (代码与之前相同，因为不涉及 item 操作)
 
     // 1. 准备新容器 ID
     const newContainerId = nanoid();
@@ -385,7 +402,7 @@ export function useFlattenedChat(chatRef: MaybeRef<RootChat | null>) {
     initialLeaf.messages.push(newContainer);
 
     // 3. 生成上下文
-    const contextResult = createChatContext(root, undefined);
+    const contextResult = await createChatContext(root, undefined);
 
     // 4. 【核心】：构建实时寻址函数
     getLatestContainer = () => {
@@ -394,23 +411,17 @@ export function useFlattenedChat(chatRef: MaybeRef<RootChat | null>) {
       if (!currentRoot) throw new Error("Chat root lost");
 
       // B. 重新找到当前的活动叶子节点
-      // 假设用户没有在生成过程中切换分支，这通常是正确的
       const currentLeaf = findActiveLeafContainer(currentRoot);
 
       // C. 在叶子节点的消息列表中查找我们的容器 ID
-      // 这里必须用 find，不能用索引，因为可能正好有其他操作插入了消息
       const containerFound = currentLeaf.messages.find(
         (m) => m.id === newContainerId
       );
 
       if (!containerFound) {
-        // 极端情况：如果用户切换了分支，findActiveLeafContainer 可能会变。
-        // 如果需要更稳健，这里应该实现一个全局的 findNodeById(root, newContainerId)
-        // 但对于 "当前对话流"，findActiveLeafContainer 通常足够
         throw new Error("Generated container lost (branch switched?)");
       }
 
-      // D. 返回 Alternative
       return containerFound.alternatives[0];
     };
 
@@ -438,16 +449,17 @@ export function useFlattenedChat(chatRef: MaybeRef<RootChat | null>) {
 
   // ========== Embedding ==========
 
-  const embedMessage = async (index: number, forceModel?: string) => {
+  const embedMessage = async (item: FlatChatMessage, forceModel?: string) => {
     // 此处保留原有逻辑
+    const index = getIndexOfItem(item);
     console.log("Embed message at", index, forceModel);
   };
 
   /**
    * 准备润色上下文。
    */
-  const polish = (
-    target: { index: number } | { content: string; role: role }
+  const polish = async (
+    target: { item: FlatChatMessage } | { content: string; role: role }
   ) => {
     const root = toValue(chatRef);
     if (!root) throw new Error("Chat root is missing");
@@ -459,18 +471,19 @@ export function useFlattenedChat(chatRef: MaybeRef<RootChat | null>) {
     const intention = "polish";
 
     // 情况 A: 润色现有消息
-    if ("index" in target) {
-      const { index } = target;
-      const result = getContainerByIndex(index);
+    if ("item" in target) {
+      const { item } = target;
+      const result = resolvePathTarget(item);
       if (!result?.container) {
-        throw new Error(`Polish failed: container not found at ${index}`);
+        throw new Error(`Polish failed: container not found for item`);
       }
 
       const realContainer = result.container;
       const originalActiveIndex = realContainer.activeAlternative;
 
-      // 1. 获取上下文
-      const contextResult = createChatContext(root, index - 1);
+      // 1. 获取上下文 (需要 index)
+      const index = getIndexOfItem(item);
+      const contextResult = await createChatContext(root, index - 1);
       rawContext = contextResult.rawContext;
 
       // 2. 准备容器
@@ -496,7 +509,7 @@ export function useFlattenedChat(chatRef: MaybeRef<RootChat | null>) {
     // 情况 B: 润色输入框内容 (未挂载到树上)
     else {
       const { content, role } = target;
-      const contextResult = createChatContext(root, undefined);
+      const contextResult = await createChatContext(root, undefined);
       rawContext = contextResult.rawContext;
 
       // 这里的容器是临时的，使用 reactive 显式包装，以支持界面更新
@@ -523,7 +536,7 @@ export function useFlattenedChat(chatRef: MaybeRef<RootChat | null>) {
     setMessageContent,
     setMessageMeta,
     findActiveLeafContainer,
-    getPath: (index: number) => flattenedChat.value.messages[index]?.path ?? [],
+    getPath: (item: FlatChatMessage) => item.path ?? [],
 
     // CRUD
     addBlankMessage,

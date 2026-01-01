@@ -1,3 +1,4 @@
+<!-- src/components/SchemaRenderer/SchemaRenderer.vue -->
 <script setup lang="ts">
 import { ref, computed, type Component, onMounted, onUnmounted } from "vue";
 import { get, set } from "lodash-es";
@@ -111,10 +112,19 @@ function resolveComponent(name: ComponentName): Component | string {
   return name;
 }
 
-// [NEW] 判断是否使用纵向布局 (移动端强制纵向)
+// 判断是否使用纵向布局 (移动端强制纵向)
 function shouldUseVerticalLayout(row: Row): boolean {
+  // 1. 如果 Schema 显式配置了 useTopBottom: true，优先级最高，无论端都上下布局
+  if (row.useTopBottom) return true;
+
+  // 2. [核心修改] 特殊策略：如果是 Switch 组件，即使在移动端也保持左右布局 (返回 false)
+  if (row.component === "Switch") return false;
+
+  // 3. 其他情况：移动端强制上下布局
   if (isMobile.value) return true;
-  return !!row.useTopBottom;
+
+  // 4. 桌面端默认为左右布局
+  return false;
 }
 
 // --- 生命周期 ---
@@ -299,7 +309,7 @@ onUnmounted(() => {
         'flex-1 min-w-0 min-h-0 bg-background/50',
         isMobile
           ? showMobileDetail
-            ? 'absolute inset-0 z-50 bg-background flex flex-col'
+            ? 'absolute inset-0 z-10 bg-background flex flex-col'
             : 'hidden'
           : 'flex flex-col',
       ]"
@@ -398,7 +408,7 @@ onUnmounted(() => {
                       </ItemDescription>
                     </ItemContent>
                     <ItemActions>
-                      <div class="w-60 flex justify-end">
+                      <div class="flex justify-end w-auto md:w-60">
                         <component
                           :is="resolveComponent(row.component)"
                           v-bind="row.props"
@@ -420,16 +430,14 @@ onUnmounted(() => {
   </div>
 </template>
 
-<style>
+<style scoped>
 :root {
   font-size: clamp(14px, 1vw + 0.1rem, 15px);
 }
 
 /* 优化移动端点击体验 */
 @media (max-width: 768px) {
-  button,
   input,
-  select,
   textarea {
     min-height: 44px; /* 触控热区 */
   }

@@ -8,6 +8,7 @@
   ></div>
 
   <aside
+    id="rightSidebar"
     :class="
       cn(
         'shrink-0 bg-background flex flex-col overflow-hidden',
@@ -78,6 +79,9 @@ const hasActiveContent = computed(() => {
 </script>
 
 <style scoped>
+#rightSidebar {
+  padding-top: env(safe-area-inset-top);
+}
 .custom-teleport-container {
   display: flex;
   flex-direction: column;

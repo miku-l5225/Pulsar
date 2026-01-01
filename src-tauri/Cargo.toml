@@ -33,7 +33,7 @@ tauri-plugin-process = "2"
 tauri-plugin-http = "2"
 tauri-plugin-clipboard-manager = "2"
 tauri-plugin-fs = "2"
-reqwest = { version = "0.12.24", features = ["stream", "json", "multipart"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream", "json", "multipart"] }
 bytes = "1"
 tokio = { version = "1", features = ["full"] }
 tokio-tungstenite = "0.20"
@@ -52,7 +52,7 @@ portpicker = "0.1"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-autostart = "2"
-tauri-plugin-positioner = { version = "2.0.0", features = ["tray-icon"] }
+tauri-plugin-positioner = { version = "2", features = ["tray-icon"] }
 
 [dependencies.tauri-plugin-sql]
 features = ["sqlite"]

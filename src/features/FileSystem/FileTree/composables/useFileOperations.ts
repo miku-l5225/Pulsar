@@ -1,6 +1,7 @@
 // src/features/FileSystem/FileTree/composables/useFileOperations.ts
 import { ref } from "vue";
 import {
+  FileSignal,
   useFileSystemStore,
   VirtualFile,
   VirtualFolder,
@@ -212,6 +213,17 @@ export function useFileOperations() {
     }
   };
 
+  const handleSetSignal = async (path: string, signal: FileSignal | null) => {
+    const node = store.resolvePath(path);
+    if (node instanceof VirtualFile) {
+      if (signal) {
+        await node.setSignal(signal);
+      } else {
+        await node.removeSignal();
+      }
+    }
+  };
+
   return {
     clipboard,
     nodeToDelete,
@@ -233,5 +245,6 @@ export function useFileOperations() {
     handleOpenInExplorer,
     handleOpenWithDefault,
     handleDecompress,
+    handleSetSignal,
   };
 }

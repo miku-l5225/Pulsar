@@ -1,5 +1,5 @@
 // src/schema/chat/chat.utils.ts
-import { cloneDeep, get, set, isFunction } from "lodash-es";
+import { cloneDeep } from "lodash-es";
 import {
   type RootChat,
   type ChatMessageItem,
@@ -16,31 +16,81 @@ import { EnhancedApiReadyContext } from "./EnhancedApiReadyContext/EnhancedApiRe
 
 // ========== 变量与状态处理 ==========
 
-export function applyVariableChange(targetObject: any, change: VariableChange) {
-  const { accessChain, updateMethod } = change;
-  if (isFunction(updateMethod)) {
-    const oldValue = get(targetObject, accessChain);
-    const newValue = updateMethod(oldValue);
-    if (newValue !== undefined) set(targetObject, accessChain, newValue);
-  } else {
-    set(targetObject, accessChain, updateMethod);
+// 获取 AsyncFunction 构造器用于动态执行
+const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+
+/**
+ * 动态执行用户提供的代码片段。
+ * 期望代码中包含 `async main(arg) { ... }`，系统将调用它并返回结果。
+ *
+ * @param scriptCode 用户编写的代码字符串
+ * @param inputArgument 传入 main 函数的参数 (oldValue)
+ */
+async function executeUserScript(scriptCode: string, inputArgument: any) {
+  try {
+    // 构造函数体：
+    // 1. 注入用户的代码 (定义 main)
+    // 2. 调用 main 并传入参数
+    const body = `
+      ${scriptCode}
+      if (typeof main !== 'function') {
+        throw new Error("User script must define an 'async main' function.");
+      }
+      return await main(inputArgument);
+    `;
+
+    // 创建异步函数 (inputArgument 是函数内部可访问的变量名)
+    const fn = new AsyncFunction("inputArgument", body);
+
+    // 执行
+    const result = await fn(inputArgument);
+    return result;
+  } catch (err) {
+    console.error("Failed to execute variable change script:", err);
+    console.error("Script content:", scriptCode);
+    // 出错时返回原值，避免整个链条崩溃，或者根据需求抛出异常
+    return inputArgument;
   }
 }
 
-export function resolveUserValue(
-  rootUserValue: Record<string, any>,
+/**
+ * [重写] 解析用户变量。
+ * 1. 克隆初始 userValue
+ * 2. (可选) 执行 valueWrapper 进行包装
+ * 3. 收集路径上的所有 VariableChange
+ * 4. 链式执行代码更新变量
+ */
+export async function resolveUserValue(
+  root: RootChat,
   activeMessages: ChatMessageItem[]
-): Record<string, any> {
-  const resolvedUserValue = cloneDeep(rootUserValue);
+): Promise<any> {
+  // 1. 从贫血对象开始
+  let currentValue = cloneDeep(root.userValue);
+
+  // 2. 如果有包装器，先执行包装 (Transform raw object to rich object)
+  if (root.valueWrapper && root.valueWrapper.trim()) {
+    currentValue = await executeUserScript(root.valueWrapper, currentValue);
+  }
+
+  // 3. 收集激活路径上的所有变更
+  const changes: VariableChange[] = [];
   activeMessages.forEach((msg) => {
     const activeContent = msg.alternatives[msg.activeAlternative];
     if (activeContent?.type === "message") {
       activeContent.metaGenerateInfo.variableChanges?.forEach((change) => {
-        applyVariableChange(resolvedUserValue, change);
+        changes.push(change);
       });
     }
   });
-  return resolvedUserValue;
+
+  // 4. 链式执行变更
+  for (const change of changes) {
+    if (change.code && change.code.trim()) {
+      currentValue = await executeUserScript(change.code, currentValue);
+    }
+  }
+
+  return currentValue;
 }
 
 // ========== 树遍历与压平 ==========
@@ -362,7 +412,10 @@ export function transformMessagesForApi(
   return apiReadyMessages;
 }
 
-export function createChatContext(root: RootChat, sliceEndIndex?: number) {
+export async function createChatContext(
+  root: RootChat,
+  sliceEndIndex?: number
+) {
   let activeMessages = getActiveMessagesFlat(root);
 
   if (sliceEndIndex !== undefined) {
@@ -396,15 +449,15 @@ export function createChatContext(root: RootChat, sliceEndIndex?: number) {
       : activeMessages;
 
   const transformedMessages = transformMessagesForApi(finalActiveMessages);
-  const resolvedUserValue = resolveUserValue(
-    root.userValue,
-    finalActiveMessages
-  );
+
+  // [关键变更] 异步解析变量
+  const resolvedUserValue = await resolveUserValue(root, finalActiveMessages);
 
   const apiReadyContext: ApiReadyContext = {
     activeMessages: transformedMessages,
-    resolvedUserValue: Object.freeze(resolvedUserValue),
+    resolvedUserValue: resolvedUserValue, // 这里可能是一个富对象
     resolvedIntervals: resolvedIntervals,
+    variableDocument: root.document,
   };
 
   const container = new EnhancedApiReadyContext(apiReadyContext);

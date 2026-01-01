@@ -1,4 +1,3 @@
-<!-- src/schema/chat/ChatEditor.vue -->
 <script setup lang="ts">
 import { computed, onMounted, type CSSProperties, nextTick, ref } from "vue";
 import { push } from "notivue";
@@ -10,7 +9,11 @@ import { useFlattenedChat } from "./useFlattenedChat";
 import { useChatScroll } from "./composables/useChatScroll";
 
 // Types
-import { type RootChat, type AdditionalParts } from "./chat.types";
+import {
+  type RootChat,
+  type AdditionalParts,
+  type FlatChatMessage,
+} from "./chat.types";
 import { type role } from "../shared.types";
 
 // Components
@@ -62,31 +65,31 @@ onMounted(() => scrollToBottom("auto"));
 // --- Actions Handlers ---
 
 // 通用动作分发器
-function handleMessageAction(action: string, index: number) {
+function handleMessageAction(action: string, msg: FlatChatMessage) {
   switch (action) {
     case "regenerate":
-      handleGenerate(index);
+      handleGenerate(msg);
       break;
     case "delete":
-      deleteContainer(index);
+      deleteContainer(msg);
       break;
     case "branch":
-      addBlankBranch(index, true);
+      addBlankBranch(msg, true);
       break;
     case "add-new":
-      addBlankMessage(index, true);
+      addBlankMessage(msg, true);
       break;
     case "polish":
-      handlePolishAction({ index });
+      handlePolishAction({ item: msg });
       break;
     case "fork":
-      fork(index);
+      fork(msg);
       break;
     case "insert":
-      appendMessage(index);
+      appendMessage(msg);
       break;
     case "copy":
-      const content = flattenedChat.value.messages[index]?.content;
+      const content = msg.content;
       if (content?.type === "message")
         navigator.clipboard.writeText(content.content);
       push.success("已复制到剪贴板");
@@ -96,11 +99,11 @@ function handleMessageAction(action: string, index: number) {
 
 // 润色逻辑
 async function handlePolishAction(
-  target: { index: number } | { content: string; role: role }
+  target: { item: FlatChatMessage } | { content: string; role: role }
 ) {
   if (!chatReactive.value) return;
   try {
-    const { CHAT, container, intention, remove } = polish(target);
+    const { CHAT, container, intention, remove } = await polish(target);
     const finalContext = {
       ...getExecuteContextSnapshot(),
       CHAT,
@@ -113,7 +116,7 @@ async function handlePolishAction(
     await nextTick();
 
     if (finalContext.PRESET?.generate) {
-      if (!("index" in target)) {
+      if (!("item" in target)) {
         // 如果是输入框润色，监听变化回填
         const { watch } = await import("vue");
         const unwatch = watch(
@@ -134,9 +137,9 @@ async function handlePolishAction(
 }
 
 // 生成逻辑
-async function handleGenerate(index?: number) {
+async function handleGenerate(msg?: FlatChatMessage) {
   if (!chatReactive.value) return;
-  const ctx = { ...getExecuteContextSnapshot(), ...generate(index) };
+  const ctx = { ...getExecuteContextSnapshot(), ...(await generate(msg)) };
   // @ts-ignore
   ctx.CTX = ctx;
 
@@ -180,8 +183,7 @@ async function onSend(
     if (role === "user") {
       handleGenerate();
     } else {
-      // 如果插入的是 assistant 且要求生成（通常不应该发生，但逻辑上支持），则触发生成
-      // 或者这里可以理解为 "继续生成"
+      // 如果插入的是 assistant 且要求生成，则触发生成
     }
   } else {
     await nextTick();
@@ -240,16 +242,17 @@ const backgroundStyle = computed<CSSProperties>(() => {
           class="flex flex-col py-6 max-w-4xl mx-auto w-full min-h-full transition-all duration-300"
           :class="mobile ? 'px-2' : 'px-4'"
         >
+          <!-- 这里 key 仍然使用 id，但传递给事件的是 msg 对象 -->
           <ChatBubble
             v-for="(msg, i) in flattenedChat.messages"
             :key="msg.id"
             :message="msg"
             :index="i"
             :avatar-src="resourceAvatar.src.value"
-            @update-content="(content) => setMessageContent(i, content)"
-            @switch-alt="(altIndex) => switchAlternative(i, altIndex)"
-            @action="(action) => handleMessageAction(action, i)"
-            @rename="(name) => renameAlternative(i, name)"
+            @update-content="(content) => setMessageContent(msg, content)"
+            @switch-alt="(altIndex) => switchAlternative(msg, altIndex)"
+            @action="(action) => handleMessageAction(action, msg)"
+            @rename="(name) => renameAlternative(msg, name)"
           />
 
           <!-- 底部垫高：Input Area 移动端高度可能不同，稍微调小一点 -->

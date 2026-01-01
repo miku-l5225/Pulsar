@@ -273,7 +273,7 @@ function createDefaultPreset(): Preset {
             name: "主系统提示词",
             enabled: true,
             role: "system",
-            injectPosition: "BEFORE_CHAR",
+            injectPosition: "none",
             content:
               "你是 {{CHARACTER.name}}。\n你的性格是{{CHARACTER.personality}}， 对话历史为[[CHAT]]",
           },

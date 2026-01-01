@@ -21,13 +21,20 @@ import {
 } from "../FileSystem/FileSystem.store";
 import { FSEventType, fsEmitter } from "../FileSystem/FileSystem.events";
 
-import { Cpu, ClipboardList, Key, Server, Settings2 } from "lucide-vue-next";
+import {
+  Cpu,
+  ClipboardList,
+  Key,
+  Server,
+  Settings2,
+  Search,
+} from "lucide-vue-next";
 import ProcessPanel from "../ProcessManager/ProcessPanel.vue";
 import TaskPanel from "../Task/TaskPanel.vue";
 import SecretsPanel from "../Secrets/SecretsPanel.vue";
 import McpPanel from "../MCP/McpPanel.vue";
-// import ManifestPanel from "@/schema/manifest/ManifestPanel.vue";
-import ContentRouter from "@/components/ResourceSidebar/ContentRouter.vue";
+import SearchSidebar from "@/components/layout/SearchSidebar.vue";
+import ContentRouter from "@/components/EnvironmentSidebar/ContentRouter.vue";
 
 export interface BottomBarItem {
   id: string;
@@ -39,6 +46,7 @@ export interface BottomBarItem {
 // 1. 变更：扩展 SidebarView 类型，加入新的功能ID
 export type SidebarView =
   | "files"
+  | "search"
   | "character"
   | "process-manager"
   | "task-manager"
@@ -91,6 +99,12 @@ export const useUIStore = defineStore("UI", () => {
       name: "角色配置",
       icon: Settings2,
       component: markRaw(ContentRouter),
+    },
+    {
+      id: "search",
+      name: "搜索",
+      icon: Search,
+      component: markRaw(SearchSidebar),
     },
     {
       id: "process-manager",
