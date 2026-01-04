@@ -1,19 +1,20 @@
 // src-tauri/src/lib.rs
 
 mod backup;
+mod proxy_server;
+mod remote_service;
+mod script_manager;
 mod search;
 mod secrets_manager;
-mod script_manager;
-mod remote_service;
-mod proxy_server;
 
 mod error;
+mod machine_id;
 
+#[allow(unused_imports)]
+use remote_service::{init_remote_service, RemoteServiceState};
 use std::collections::HashMap; // 引入 HashMap
 #[allow(unused_imports)]
 use std::sync::Arc;
-#[allow(unused_imports)]
-use remote_service::{RemoteServiceState, init_remote_service};
 use tauri::{Manager, RunEvent, WindowEvent}; // 引入 RunEvent
 use tokio::sync::Mutex; // 确保 Mutex 被引入
 
@@ -29,7 +30,6 @@ fn cleanup_child_processes(handle: &tauri::AppHandle) {
         .unwrap();
 
     rt.block_on(async {
-
         // 关闭所有脚本
         let script_state = handle.state::<script_manager::ScriptProcessState>();
         let mut children_lock = script_state.children.lock().await;
@@ -52,8 +52,6 @@ fn cleanup_child_processes(handle: &tauri::AppHandle) {
     println!("Cleanup of child processes finished.");
 }
 
-
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // 将 Builder 的结果赋值给一个变量 `app`
@@ -70,9 +68,10 @@ pub fn run() {
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_store::Builder::new().build())
-        .manage(script_manager::ScriptProcessState { // 添加 ScriptProcessState
-               children: Mutex::new(HashMap::new()),
-           })
+        .manage(script_manager::ScriptProcessState {
+            // 添加 ScriptProcessState
+            children: Mutex::new(HashMap::new()),
+        })
         // 注册端口状态，初始为 0
         .manage(proxy_server::ProxyPort(std::sync::Mutex::new(0)))
         // 注册所有命令
@@ -91,56 +90,59 @@ pub fn run() {
             proxy_server::get_proxy_port,
             remote_service::open_remote_window,
             remote_service::send_to_remote_window,
-            search::search_in_files
+            search::search_in_files,
+            machine_id::get_machine_id
         ])
         .setup(|app| {
-                #[cfg(desktop)]
-          {
+            #[cfg(desktop)]
+            {
                 let remote_state = Arc::new(RemoteServiceState::new());
                 app.manage(remote_state.clone());
                 init_remote_service(app.handle().clone(), remote_state);
+            }
 
-          }
-
-                #[cfg(desktop)]
-                {
-                  app.handle().plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec!["--flag1", "--flag2"])))?;
-                  app.handle().plugin(tauri_plugin_positioner::init())?;
-                  tauri::tray::TrayIconBuilder::new()
-                      .on_tray_icon_event(|tray_handle, event| {
+            #[cfg(desktop)]
+            {
+                app.handle().plugin(tauri_plugin_autostart::init(
+                    tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+                    Some(vec!["--flag1", "--flag2"]),
+                ))?;
+                app.handle().plugin(tauri_plugin_positioner::init())?;
+                tauri::tray::TrayIconBuilder::new()
+                    .on_tray_icon_event(|tray_handle, event| {
                         tauri_plugin_positioner::on_tray_event(tray_handle.app_handle(), &event);
-                      })
-                      .build(app)?;
-                }
-                // --- 启动代理服务器 ---
-                let port = proxy_server::start_proxy_server(app.handle().clone());
-                // 将端口号保存到 State 中
-                let port_state = app.state::<proxy_server::ProxyPort>();
-                *port_state.0.lock().unwrap() = port;
-                println!("Proxy server initialized on port: {}", port);
+                    })
+                    .build(app)?;
+            }
+            // --- 启动代理服务器 ---
+            let port = proxy_server::start_proxy_server(app.handle().clone());
+            // 将端口号保存到 State 中
+            let port_state = app.state::<proxy_server::ProxyPort>();
+            *port_state.0.lock().unwrap() = port;
+            println!("Proxy server initialized on port: {}", port);
 
-              Ok(())
-            })
+            Ok(())
+        })
         .on_window_event(|window, event| match event {
-                  WindowEvent::Destroyed => {
-                      // 当最后一个窗口被销毁时，执行清理。
-                      // len() <= 1 是因为在这个事件触发时，被销毁的窗口可能还在窗口列表中。
-                      if window.app_handle().webview_windows().len() <= 1 {
-                          println!("Last window destroyed, cleaning up child processes...");
-                          cleanup_child_processes(&window.app_handle());
-                      }
-                  }
-                  _ => {}
-              })
-              .build(tauri::generate_context!())
-              .expect("error while running tauri application");
+            WindowEvent::Destroyed => {
+                // 当最后一个窗口被销毁时，执行清理。
+                // len() <= 1 是因为在这个事件触发时，被销毁的窗口可能还在窗口列表中。
+                if window.app_handle().webview_windows().len() <= 1 {
+                    println!("Last window destroyed, cleaning up child processes...");
+                    cleanup_child_processes(&window.app_handle());
+                }
+            }
+            _ => {}
+        })
+        .build(tauri::generate_context!())
+        .expect("error while running tauri application");
 
-          // 调用 .run() 并传入一个闭包来处理应用级别的事件
-          app.run(|app_handle, event| {
-              if let RunEvent::ExitRequested { .. } = event {
-                  println!("Application exit requested, cleaning up child processes...");
-                  cleanup_child_processes(app_handle);
-                  // 这里不需要调用 api.prevent_exit()，因为我们的清理函数是同步阻塞的。
-              }
-          });
-      }
+    // 调用 .run() 并传入一个闭包来处理应用级别的事件
+    app.run(|app_handle, event| {
+        if let RunEvent::ExitRequested { .. } = event {
+            println!("Application exit requested, cleaning up child processes...");
+            cleanup_child_processes(app_handle);
+            // 这里不需要调用 api.prevent_exit()，因为我们的清理函数是同步阻塞的。
+        }
+    });
+}

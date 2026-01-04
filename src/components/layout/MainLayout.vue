@@ -22,13 +22,6 @@ onMounted(async () => {
   await customPageStore.init();
 });
 
-const movedToTopIds = [
-  "process-manager",
-  "task-manager",
-  "secrets-manager",
-  "mcp-manager",
-];
-
 // 计算属性：所有的导航按钮（合并 Top 和 Bottom，用于移动端扁平化展示）
 const allNavButtons = computed(() => {
   const base = [
@@ -46,15 +39,21 @@ const allNavButtons = computed(() => {
     },
   ];
 
-  // Store 中的功能
-  const features = uiStore.bottomBarItems
-    .filter((item) => item.id !== "manifest-config" && item.id !== "search") // 配置项在顶栏右侧，这里不显示
+  // Store 中的功能 (Top)
+  const topFeatures = uiStore.featureTopItems.map((item) => ({
+    svg: item.icon!,
+    id: item.id,
+    onClick: () => uiStore.toggleSidebarView(item.id as SidebarView),
+    title: item.name,
+  }));
+
+  // Store 中的功能 (Bottom)
+  const bottomFeatures = uiStore.featureBottomItems
+    .filter((item) => item.id !== "search") // 移动端暂不显示搜索
     .map((item) => ({
       svg: item.icon!,
       id: item.id,
-      onClick: movedToTopIds.includes(item.id)
-        ? () => uiStore.toggleSidebarView(item.id as SidebarView)
-        : () => uiStore.toggleRightSidebar(item.id),
+      onClick: () => uiStore.toggleRightSidebar(item.id),
       title: item.name,
     }));
 
@@ -74,7 +73,7 @@ const allNavButtons = computed(() => {
     },
   ];
 
-  return [...base, ...features, ...statics];
+  return [...base, ...topFeatures, ...bottomFeatures, ...statics];
 });
 
 // 桌面端 Top Buttons
@@ -93,14 +92,12 @@ const topButtons = computed(() => {
       isActive: uiStore.uiState.leftSidebarView === "files",
     },
   ];
-  const movedItems = uiStore.bottomBarItems
-    .filter((item) => movedToTopIds.includes(item.id))
-    .map((item) => ({
-      svg: item.icon!,
-      onClick: () => uiStore.toggleSidebarView(item.id as SidebarView),
-      title: item.name,
-      isActive: uiStore.uiState.leftSidebarView === item.id,
-    }));
+  const movedItems = uiStore.featureTopItems.map((item) => ({
+    svg: item.icon!,
+    onClick: () => uiStore.toggleSidebarView(item.id as SidebarView),
+    title: item.name,
+    isActive: uiStore.uiState.leftSidebarView === item.id,
+  }));
   return [...baseButtons, ...movedItems];
 });
 
@@ -116,19 +113,14 @@ const combinedBottomButtons = computed(() => {
     },
     { svg: Settings, onClick: "setting.[setting].json", title: "Settings" },
   ];
-  const remainingStoreItems = uiStore.bottomBarItems
-    .filter(
-      (item) =>
-        !movedToTopIds.includes(item.id) && item.id !== "manifest-config"
-    )
-    .map((item) => ({
-      svg: item.icon!,
-      onClick: () => uiStore.toggleRightSidebar(item.id),
-      title: item.name,
-      isActive:
-        uiStore.uiState.isRightSidebarOpen &&
-        uiStore.uiState.activeRightPanelId === item.id,
-    }));
+  const remainingStoreItems = uiStore.featureBottomItems.map((item) => ({
+    svg: item.icon!,
+    onClick: () => uiStore.toggleRightSidebar(item.id),
+    title: item.name,
+    isActive:
+      uiStore.uiState.isRightSidebarOpen &&
+      uiStore.uiState.activeRightPanelId === item.id,
+  }));
   return [...staticBtns, ...remainingStoreItems];
 });
 

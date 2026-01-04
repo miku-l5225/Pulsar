@@ -11,6 +11,7 @@ import {
   Search,
   Server,
   Settings2,
+  Users, // Added Users icon
 } from "lucide-vue-next";
 import { defineStore } from "pinia";
 import {
@@ -33,7 +34,9 @@ import {
 import McpPanel from "../MCP/McpPanel.vue";
 import ProcessPanel from "../ProcessManager/ProcessPanel.vue";
 import SecretsPanel from "../Secrets/SecretsPanel.vue";
+
 import TaskPanel from "../Task/TaskPanel.vue";
+import MultiPlayerPanel from "../MultiPlayer/MultiPlayerPanel.vue"; // Added MultiPlayerPanel import
 
 export interface BottomBarItem {
   id: string;
@@ -51,7 +54,9 @@ export type SidebarView =
   | "task-manager"
   | "secrets-manager"
   | "mcp-manager"
+  | "multi-player" // Added multi-player view type
   | "none";
+
 
 export interface UIState {
   openedFiles: string[];
@@ -129,7 +134,33 @@ export const useUIStore = defineStore("UI", () => {
       icon: Server,
       component: markRaw(McpPanel),
     },
+    {
+      id: "multi-player",
+      name: "联机",
+      icon: Users,
+      component: markRaw(MultiPlayerPanel),
+    },
   ]);
+
+  const movedToTopIds = [
+    "process-manager",
+    "task-manager",
+    "secrets-manager",
+
+    "mcp-manager",
+    "multi-player", // Added multi-player to top items
+  ];
+
+  const featureTopItems = computed(() =>
+    leftBarItems.value.filter((item) => movedToTopIds.includes(item.id))
+  );
+
+  const featureBottomItems = computed(() =>
+    leftBarItems.value.filter(
+      (item) =>
+        !movedToTopIds.includes(item.id) && item.id !== "manifest-config"
+    )
+  );
 
   const addSidebarItem = (item: BottomBarItem) => {
     const existingIndex = leftBarItems.value.findIndex((i) => i.id === item.id);
@@ -308,7 +339,7 @@ export const useUIStore = defineStore("UI", () => {
     const filesToClose = uiState.value.openedFiles.filter(
       (opened) => opened === path || opened.startsWith(path + "/")
     );
-    filesToClose.forEach((file) => closeFile(file));
+    filesToClose.forEach((file) => {closeFile(file)});
   };
 
   const setupEventListeners = () => {
@@ -349,6 +380,8 @@ export const useUIStore = defineStore("UI", () => {
     customComponents,
     registerComponent,
     bottomBarItems: leftBarItems,
+    featureTopItems,
+    featureBottomItems,
     addSidebarItem,
     setSidebarContainers,
     isLeftSidebarOpen,

@@ -17,6 +17,7 @@ import { useFileSystemStore } from "@/features/FileSystem/FileSystem.store";
 import { useCustomPageStore } from "./features/CustomPage/CustomPage.store";
 import { useProcessManagerStore } from "./features/ProcessManager/ProcessManager.store";
 import { useUIStore } from "./features/UI/UI.store";
+import { useMultiPlayerStore } from "@/features/MultiPlayer/MultiPlayer.store";
 
 const fsStore = useFileSystemStore();
 // 获取 process manager store 实例
@@ -24,6 +25,7 @@ const processStore = useProcessManagerStore();
 const uiStore = useUIStore();
 
 const customPageStore = useCustomPageStore();
+const multiPlayerStore = useMultiPlayerStore();
 
 const appWindow = getCurrentWindow();
 
@@ -43,6 +45,10 @@ async function setupStores() {
 	// 3. 初始化自定义页面
 	await customPageStore.init();
 	console.log("[App] CustomPage Store initialized.");
+
+	// 4. Init MultiPlayer
+	await multiPlayerStore.init();
+	console.log("[App] MultiPlayer Store initialized.");
 }
 
 onMounted(() => {

@@ -1,5 +1,5 @@
 {
-	"$schema": "https://biomejs.dev/schemas/2.3.10/schema.json",
+	"$schema": "https://biomejs.dev/schemas/2.3.11/schema.json",
 	"vcs": {
 		"enabled": true,
 		"clientKind": "git",
@@ -9,11 +9,18 @@
 		{
 			"includes": ["**/*.svelte", "**/*.astro", "**/*.vue"],
 			"linter": {
+				"domains": {
+					"vue": "recommended"
+				},
 				"rules": {
+					"suspicious":{
+						"noAssignInExpressions": "off"
+					},
 					"style": {
 						"useConst": "off",
 						"useImportType": "off",
 						"noNonNullAssertion": "off"
+						
 					},
 					"correctness": {
 						"noUnusedVariables": "off",
@@ -32,6 +39,9 @@
 	},
 	"linter": {
 		"enabled": true,
+		"domains": {
+			"vue": "recommended"
+		},
 		"rules": {
 			"recommended": true,
 			"style": {
