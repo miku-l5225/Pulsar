@@ -5,7 +5,7 @@ import { get, set } from "lodash-es";
 import draggable from "vuedraggable";
 
 // --- 类型定义 ---
-import type { UserValue } from "@/schema/shared.types";
+import type { UserValue } from "@/resources/shared.types";
 import type { ComponentName } from "../SchemaRenderer.types.ts";
 
 // --- Shadcn UI 及自定义组件导入 ---

@@ -10,7 +10,7 @@ import {
   VirtualFile,
   VirtualFolder,
 } from "@/features/FileSystem/FileSystem.store";
-import type { SemanticType } from "@/schema/SemanticType";
+import type { SemanticType } from "@/resources/SemanticType";
 
 export function useFileOperations() {
   const store = useFileSystemStore();

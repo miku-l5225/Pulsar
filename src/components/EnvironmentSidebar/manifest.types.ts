@@ -1,5 +1,5 @@
 // src/components/EnvironmentSidebar/manifest.types.ts
-import type { SemanticType } from "@/schema/SemanticType";
+import type { SemanticType } from "@/resources/SemanticType";
 
 // ==========================================
 // 新增类型定义

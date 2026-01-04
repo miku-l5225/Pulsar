@@ -13,8 +13,8 @@
 // // 导入源格式类型
 // import type { SillyTavernCharacterCardV3, CharacterCardV3Data } from "./types";
 // // 从项目现有类型中导入目标格式
-// import type { Character } from "@/schema/character/character.types";
-// import { RegexRule } from "@/schema/shared.types";
+// import type { Character } from "@/resources/character/character.types";
+// import { RegexRule } from "@/resources/shared.types";
 
 // /**
 //  * 定义转换函数的返回类型结构。

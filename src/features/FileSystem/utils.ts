@@ -11,7 +11,7 @@ import {
   User,
 } from "lucide-vue-next";
 import type { Component } from "vue";
-import { type SemanticType, SemanticTypeMap } from "@/schema/SemanticType";
+import { type SemanticType, SemanticTypeMap } from "@/resources/SemanticType";
 
 export interface ParsedFileName {
   displayName: string;

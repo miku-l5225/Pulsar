@@ -20,7 +20,7 @@ import {
   ArrowRight,
   PlusCircle,
 } from "lucide-vue-next";
-import { RegexRule } from "@/schema/shared.types";
+import { RegexRule } from "@/resources/shared.types";
 import { v4 as uuidv4 } from "uuid"; // 用于生成唯一ID
 
 type RegexGroup = RegexRule[];

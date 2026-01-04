@@ -10,7 +10,10 @@
     "tauri:build": "bun run tauri build --debug",
     "tauri:build:android": "bun run tauri android build --target aarch64",
     "tauri:build:all": "bun run tauri build --debug && bun run tauri android build --target aarch64",
-    "tauri:build:noDebug": "bun run tauri build"
+    "tauri:build:noDebug": "bun run tauri build",
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^2.0.33",
@@ -69,6 +72,7 @@
     "msw": "^2.12.3",
     "node-fetch": "^3.3.2",
     "notivue": "^2.4.5",
+    "peerjs": "^1.5.5",
     "pinia": "^3.0.3",
     "pino": "^10.1.0",
     "pino-pretty": "^13.1.2",
@@ -94,7 +98,7 @@
     "xterm-addon-fit": "^0.8.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.3.10",
+    "@biomejs/biome": "^2.3.11",
     "@tauri-apps/cli": "^2",
     "@types/node": "^24.10.1",
     "@vitejs/plugin-vue": "^5.2.1",
@@ -103,6 +107,7 @@
     "vite": "npm:rolldown-vite@latest",
     "vite-plugin-inspect": "^11.3.3",
     "vite-plugin-vue-devtools": "^8.0.3",
+    "vitepress": "^2.0.0-alpha.15",
     "vue-tsc": "^2.1.10"
   }
 }

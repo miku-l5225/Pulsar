@@ -1,19 +1,21 @@
+<!-- src/App.vue -->
 <script setup lang="ts">
 // <!-- src/App.vue -->
-import { onMounted } from "vue";
-import { useFileSystemStore } from "@/features/FileSystem/FileSystem.store";
-import MainLayout from "@/components/layout/MainLayout.vue";
-import { useProcessManagerStore } from "./features/ProcessManager/ProcessManager.store";
-import { useCustomPageStore } from "./features/CustomPage/CustomPage.store";
+
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
+	Notification,
 	Notivue,
 	NotivueSwipe,
-	Notification,
-	pastelTheme,
 	outlinedIcons,
+	pastelTheme,
 	// push,
 } from "notivue";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { onMounted } from "vue";
+import MainLayout from "@/components/layout/MainLayout.vue";
+import { useFileSystemStore } from "@/features/FileSystem/FileSystem.store";
+import { useCustomPageStore } from "./features/CustomPage/CustomPage.store";
+import { useProcessManagerStore } from "./features/ProcessManager/ProcessManager.store";
 import { useUIStore } from "./features/UI/UI.store";
 
 const fsStore = useFileSystemStore();
@@ -56,8 +58,9 @@ onMounted(() => {
 			"appLoaded",
 		);
 		console.log(`启动耗时: ${measure.duration.toFixed(2)}ms`);
-		appWindow.show();
-		appWindow.setFocus();
+		// 开发中别开
+		// appWindow.show();
+		// appWindow.setFocus();
 	});
 });
 </script>

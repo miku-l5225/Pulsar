@@ -8,7 +8,7 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { createXai } from "@ai-sdk/xai";
 // 引入前端项目中的类型定义
-import type { ModelConfig } from "@/schema/modelConfig/modelConfig.types";
+import type { ModelConfig } from "@/resources/modelConfig/modelConfig.types";
 import { customFetch } from "@/utils/customFetch";
 
 // 定义内置提供商及其对应的 SDK 对象

@@ -26,7 +26,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import defaultCover from "@/assets/default.jpg";
 import urlJoin from "url-join";
-import { createCharacterEnvironment } from "@/schema/SemanticType";
+import { createCharacterEnvironment } from "@/resources/SemanticType";
 
 const fsStore = useFileSystemStore();
 const uiStore = useUIStore();

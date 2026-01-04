@@ -9,7 +9,8 @@ import {
 import { debounce, isEqual } from "lodash-es";
 import { defineStore } from "pinia";
 import urlJoin from "url-join";
-import { computed, reactive, ref, watch } from "vue";
+import { reactive, ref, watch } from "vue";
+// newManifest 函数不再在此处使用，已移至 composables
 import {
   appDataDir,
   exists,
@@ -28,13 +29,13 @@ import {
 } from "@/features/FileSystem/fs.api";
 import { useMetadataStore } from "@/features/Metadata/Metadata.store";
 import { useTaskStore } from "@/features/Task/Task.store";
-import type { ModelConfig } from "@/schema/modelConfig/modelConfig.types";
+import type { ModelConfig } from "@/resources/modelConfig/modelConfig.types";
 import {
   getNewTypedFile,
   type SemanticType,
   SemanticTypeMap,
-} from "@/schema/SemanticType";
-import type { Setting } from "@/schema/setting/setting.types";
+} from "@/resources/SemanticType";
+import type { Setting } from "@/resources/setting/setting.types";
 import { FSEventType, fsEmitter } from "./FileSystem.events";
 
 // 定义元数据结构接口（可选，为了类型提示）
@@ -542,7 +543,7 @@ export class VirtualFile extends VirtualNode {
   async removeSignal(): Promise<void> {
     if (!this.signal) return; // 没有 Signal，无需操作
 
-    const { type, rawContent } = this._parsedMetadata;
+    const { type } = this._parsedMetadata;
     const oldName = this.name;
     let newName = oldName;
 
@@ -1184,6 +1185,11 @@ export const useFileSystemStore = defineStore("newFileSystem", () => {
   const SETTING_PATH = "setting.[setting].json";
   const MODEL_CONFIG_PATH = "modelConfig.[modelConfig].json";
 
+  const _getSetting = () =>
+    contentCache.get(SETTING_PATH) as Setting | undefined;
+  const _getModelConfig = () =>
+    contentCache.get(MODEL_CONFIG_PATH) as ModelConfig | undefined;
+
   const _buildTreeRecursively = async (
     dirPath: string,
     parent: VirtualFolder
@@ -1260,12 +1266,8 @@ export const useFileSystemStore = defineStore("newFileSystem", () => {
     root.value = newRoot;
   };
 
-  const setting = computed(
-    () => contentCache.get(SETTING_PATH) as Setting | undefined
-  );
-  const modelConfig = computed(
-    () => contentCache.get(MODEL_CONFIG_PATH) as ModelConfig | undefined
-  );
+  // setting 和 modelConfig 现在通过 useSetting 和 useModelConfig composables 访问
+  // 保留 _getSetting 和 _getModelConfig 供内部使用（如果需要）
 
   watch(
     () => contentCache.get(SETTING_PATH),
@@ -1333,27 +1335,64 @@ export const useFileSystemStore = defineStore("newFileSystem", () => {
   const resolvePath = (path: string): VirtualNode | undefined => {
     return root.value.resolve(path);
   };
+  
+  /**
+   * 从任意路径解析出角色名称（package name）
+   * 接受任意路径，返回角色名称或报错
+   * @param path 任意路径，例如 "character/Alice/chat/xxx.json" 或 "character/Alice"
+   * @returns 角色名称，例如 "Alice"
+   */
+  const resolvePackageName = (path: string): string => {
+    // 匹配 'character/xxx' 部分，提取角色名称
+    const match = path.match(/^character\/([^/]+)/);
 
-  const resolvePackageFolder = (path: string): VirtualFolder => {
-    const node = root.value.resolve(path);
+    if (!match) {
+      throw new Error(`Path does not conform to a package structure: ${path}`);
+    }
+
+    const packageName = match[1]; // e.g., "Alice"
+    
+    // 验证角色文件夹是否存在
+    const packagePath = `character/${packageName}`;
+    const node = root.value.resolve(packagePath);
+
     if (!node) {
-      throw new Error(`Path does not exist: ${path}`);
+      throw new Error(`Package path does not exist: ${packagePath}`);
+    }
+    if (!(node instanceof VirtualFolder)) {
+      throw new Error(`Resolved package path is not a folder: ${packagePath}`);
     }
 
-    let currentFolder: VirtualFolder | null =
-      node instanceof VirtualFolder ? node : node.parent;
+    return packageName;
+  };
 
-    while (currentFolder) {
-      if (currentFolder.children.has("manifest.json")) {
-        return currentFolder;
-      }
-      if (!currentFolder.parent) break;
-      currentFolder = currentFolder.parent;
+  /**
+   * 获取角色包下的子文件夹节点
+   * @param packageName 角色名称，例如 "Alice"
+   * @param subfolderName 子文件夹名称，例如 "chat", "lorebook", "preset" 等。如果为空，返回角色根文件夹
+   * @returns VirtualFolder 节点，如果不存在则返回 null
+   */
+  const getPackageSubfolder = (
+    packageName: string,
+    subfolderName?: string
+  ): VirtualFolder | null => {
+    const packagePath = `character/${packageName}`;
+    const packageFolder = root.value.resolve(packagePath);
+
+    if (!packageFolder || !(packageFolder instanceof VirtualFolder)) {
+      return null;
     }
 
-    throw new Error(
-      `Package root not found for path: ${path} (No manifest found in ancestry)`
-    );
+    if (!subfolderName) {
+      return packageFolder;
+    }
+
+    const subfolder = packageFolder.resolve(subfolderName);
+    if (subfolder instanceof VirtualFolder) {
+      return subfolder;
+    }
+
+    return null;
   };
 
   return {
@@ -1361,12 +1400,13 @@ export const useFileSystemStore = defineStore("newFileSystem", () => {
     contentCache,
     isInitialized,
     appDataPath,
-    setting,
-    modelConfig,
+    _getModelConfig,
+    _getSetting,
     init,
     refresh,
     resolvePath,
-    resolvePackageFolder,
+    resolvePackageName,
+    getPackageSubfolder,
     restoreTrashItem,
     _readManifest,
     _writeManifest,

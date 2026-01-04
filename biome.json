@@ -5,6 +5,24 @@
 		"clientKind": "git",
 		"useIgnoreFile": true
 	},
+	"overrides": [
+		{
+			"includes": ["**/*.svelte", "**/*.astro", "**/*.vue"],
+			"linter": {
+				"rules": {
+					"style": {
+						"useConst": "off",
+						"useImportType": "off",
+						"noNonNullAssertion": "off"
+					},
+					"correctness": {
+						"noUnusedVariables": "off",
+						"noUnusedImports": "off"
+					}
+				}
+			}
+		}
+	],
 	"files": {
 		"includes": ["**", "!!**/dist"]
 	},
@@ -16,6 +34,9 @@
 		"enabled": true,
 		"rules": {
 			"recommended": true,
+			"style": {
+				"noNonNullAssertion": "error"
+			},
 			"suspicious": {
 				"noExplicitAny": "off"
 			}

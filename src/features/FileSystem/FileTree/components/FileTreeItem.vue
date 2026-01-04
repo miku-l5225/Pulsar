@@ -1,93 +1,95 @@
 <!-- src/features/FileSystem/FileTree/components/FileTreeItem.vue -->
 <script setup lang="ts">
+import {
+	Archive, // 用于压缩
+	ArchiveRestore,
+	Ban, // 用于取消
+	ChevronDown,
+	ChevronRight,
+	Clipboard,
+	Copy,
+	CopyPlus,
+	ExternalLink,
+	Eye,
+	FileEdit,
+	FileJson,
+	FileX2,
+	Folder as FolderIcon,
+	FolderOpen,
+	FolderSymlink,
+	Image as ImageIcon,
+	MonitorPlay,
+	MonitorStop,
+	Plus,
+	Scissors,
+	Share2, // 用于 Shared
+	Shuffle, // 用于 Mixed
+	Trash2,
+} from "lucide-vue-next";
 import { computed } from "vue";
 import {
-  Folder as FolderIcon,
-  ChevronRight,
-  ChevronDown,
-  FileEdit,
-  FolderOpen,
-  FolderSymlink,
-  Scissors,
-  Copy,
-  CopyPlus,
-  Clipboard,
-  Trash2,
-  FileX2,
-  Plus,
-  FileJson,
-  Image as ImageIcon,
-  Archive, // 用于压缩
-  ArchiveRestore,
-  Eye,
-  MonitorPlay,
-  MonitorStop,
-  ExternalLink,
-  Share2, // 用于 Shared
-  Shuffle, // 用于 Mixed
-  Ban, // 用于取消
-} from "lucide-vue-next";
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuSub,
-  ContextMenuSubContent,
-  ContextMenuSubTrigger,
-  ContextMenuTrigger,
+	ContextMenu,
+	ContextMenuCheckboxItem,
+	ContextMenuContent,
+	ContextMenuItem,
+	ContextMenuRadioItem,
+	ContextMenuSeparator,
+	ContextMenuSub,
+	ContextMenuSubContent,
+	ContextMenuSubTrigger,
+	ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import { type SemanticType, SemanticTypeMap } from "@/resources/SemanticType";
+import { type FileSignal, useFileSystemStore, VirtualFile } from "../..";
 import { useFileOperations } from "../composables/useFileOperations";
-import { SemanticTypeMap, type SemanticType } from "@/schema/SemanticType";
 import type { FlatTreeItem } from "../composables/useFileTree";
-import { useFileSystemStore, type FileSignal, VirtualFile } from "../..";
 
 const props = defineProps<{
-  item: FlatTreeItem;
-  canPaste: boolean;
+	item: FlatTreeItem;
+	canPaste: boolean;
 }>();
 
 const store = useFileSystemStore();
 
 // --- 更新 emits，添加 compress 和 decompress ---
 defineEmits<{
-  (e: "click"): void;
-  (e: "dblclick"): void;
-  (e: "create-file"): void;
-  (e: "create-folder"): void;
-  (e: "rename"): void;
-  (e: "delete"): void;
-  (e: "permanent-delete"): void;
-  (e: "cut"): void;
-  (e: "copy"): void;
-  (e: "duplicate"): void;
-  (e: "paste"): void;
-  (e: "copy-path", type: "relative" | "absolute" | "src"): void;
-  // 新增事件
-  (e: "compress"): void;
-  (e: "decompress"): void;
-  (e: "reveal-in-explorer"): void;
-  (e: "open-default"): void;
-  (e: "set-signal", signal: FileSignal | null): void;
+	(e: "click"): void;
+	(e: "dblclick"): void;
+	(e: "create-file"): void;
+	(e: "create-folder"): void;
+	(e: "rename"): void;
+	(e: "delete"): void;
+	(e: "permanent-delete"): void;
+	(e: "cut"): void;
+	(e: "copy"): void;
+	(e: "duplicate"): void;
+	(e: "paste"): void;
+	(e: "copy-path", type: "relative" | "absolute" | "src"): void;
+	// 新增事件
+	(e: "compress"): void;
+	(e: "decompress"): void;
+	(e: "reveal-in-explorer"): void;
+	(e: "open-default"): void;
+	(e: "set-signal", signal: FileSignal | null): void;
 }>();
 
 const ops = useFileOperations();
 
 // Icons
 const icon = computed(() => {
-  if (props.item.isFolder) return FolderIcon;
-  if (props.item.name.endsWith(".json")) return FileJson;
-  if (/\.(jpg|png|webp)$/i.test(props.item.name)) return ImageIcon;
-  return FileJson; // Default
+	if (props.item.isFolder) return FolderIcon;
+	if (props.item.name.endsWith(".json")) return FileJson;
+	if (/\.(jpg|png|webp)$/i.test(props.item.name)) return ImageIcon;
+	return FileJson; // Default
 });
 
 // Semantic Types for Context Menu
 const creatableTypes = Object.keys(SemanticTypeMap).filter(
-  (t) => t !== "unknown" && t !== "setting" && t !== "modelConfig"
+	(t) => t !== "unknown" && t !== "setting" && t !== "modelConfig",
 ) as SemanticType[];
 
 const handleCreateTyped = (type: SemanticType) => {
-  ops.handleCreateTyped(props.item.path, type);
+	ops.handleCreateTyped(props.item.path, type);
 };
 
 // 获取真实节点引用（用于获取 signal, isWatching 等实时状态）
@@ -96,43 +98,43 @@ const realNode = computed(() => store.resolvePath(props.item.path));
 
 // 1. 获取 Signal 状态
 const currentSignal = computed(() => {
-  const node = realNode.value;
-  if (node instanceof VirtualFile) {
-    return node.signal;
-  }
-  return null;
+	const node = realNode.value;
+	if (node instanceof VirtualFile) {
+		return node.signal;
+	}
+	return null;
 });
 
 // 2. 显示名称 (隐藏 .[character-S] 等)
 const displayName = computed(() => {
-  const name = props.item.name;
-  if (!name) return "";
+	const name = props.item.name;
+	if (!name) return "";
 
-  if (props.item.isFolder) return name;
-  if (name.startsWith("$")) return name.substring(1);
+	if (props.item.isFolder) return name;
+	if (name.startsWith("$")) return name.substring(1);
 
-  const lastDotIndex = name.lastIndexOf(".");
-  const nameWithoutExt =
-    lastDotIndex !== -1 ? name.substring(0, lastDotIndex) : name;
+	const lastDotIndex = name.lastIndexOf(".");
+	const nameWithoutExt =
+		lastDotIndex !== -1 ? name.substring(0, lastDotIndex) : name;
 
-  // 匹配 .[xxx]
-  const semanticMatch = nameWithoutExt.match(/\.\[(.*?)\]$/);
-  return semanticMatch
-    ? nameWithoutExt.substring(0, semanticMatch.index)
-    : nameWithoutExt;
+	// 匹配 .[xxx]
+	const semanticMatch = nameWithoutExt.match(/\.\[(.*?)\]$/);
+	return semanticMatch
+		? nameWithoutExt.substring(0, semanticMatch.index)
+		: nameWithoutExt;
 });
 
 const isZipFile = computed(
-  () => !props.item.isFolder && props.item.name.toLowerCase().endsWith(".zip")
+	() => !props.item.isFolder && props.item.name.toLowerCase().endsWith(".zip"),
 );
 
 const isWatching = computed(() => realNode.value?.isWatching || false);
 
 const toggleWatch = async () => {
-  const node = realNode.value;
-  if (!node) return;
-  if (node.isWatching) node.unwatch();
-  else await node.watch();
+	const node = realNode.value;
+	if (!node) return;
+	if (node.isWatching) node.unwatch();
+	else await node.watch();
 };
 </script>
 
